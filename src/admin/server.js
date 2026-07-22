@@ -12,6 +12,15 @@ function createAdminServer(botState, client) {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // No-cache for admin panel (fresh HTML every load)
+  app.use('/admin', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    next();
+  });
   app.use(session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-change-me',
     resave: false,
