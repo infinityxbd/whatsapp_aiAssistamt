@@ -21,6 +21,8 @@ class CustomProvider extends BaseProvider {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     } else if (this.authType === 'api-key-header') {
       headers['api-key'] = this.apiKey;
+    } else if (this.authType === 'api-key-upper') {
+      headers['API-KEY'] = this.apiKey;
     } else if (this.authType === 'x-api-key') {
       headers['x-api-key'] = this.apiKey;
     } else if (this.authType === 'basic') {
@@ -80,7 +82,9 @@ class CustomProvider extends BaseProvider {
 
   parseResponse(data) {
     if (this.responsePath) {
-      return this.resolvePath(data, this.responsePath);
+      const raw = this.resolvePath(data, this.responsePath);
+      if (Array.isArray(raw)) return raw.join('\n');
+      if (raw != null) return String(raw);
     }
     return data.choices?.[0]?.message?.content || data.text || data.content || data.response;
   }

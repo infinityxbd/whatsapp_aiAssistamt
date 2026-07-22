@@ -101,7 +101,7 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
     }
   }
 
-  // 2c. Admin check — use the improved isAdminUser (has digit matching)
+  // 2c. Admin check — try with original ID first, then resolved phone
   if (!authorized) {
     const admin = isAdminUser(senderId) || (resolvedPhone ? isAdminUser(resolvedPhone) : null);
     if (admin) {
@@ -110,15 +110,24 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
     }
   }
 
-  // 2d. Try matching with LID map entries
+  // 2d. Direct LID map lookup: senderClean → phone → admin check
+  if (!authorized && lidMap && lidMap[senderClean]) {
+    const mappedPhone = lidMap[senderClean];
+    const admin = isAdminUser(mappedPhone);
+    if (admin) {
+      authorized = true;
+      console.log(`👤 Admin match via LID map: ${senderClean} → ${mappedPhone} (${admin.name})`);
+    }
+  }
+
+  // 2e. Also try reverse lookup: if senderClean is a phone in the map, try it
   if (!authorized && lidMap) {
     for (const [key, val] of Object.entries(lidMap)) {
-      const valDigits = String(val).replace(/\D/g, '');
-      if (valDigits && senderDigits && valDigits === senderDigits) {
-        const admin = isAdminUser(val);
+      if (val === senderClean && key !== senderClean) {
+        const admin = isAdminUser(key);
         if (admin) {
           authorized = true;
-          console.log(`👤 Admin match via LID map: ${val}`);
+          console.log(`👤 Admin match via reverse LID: ${senderClean} ← ${key} (${admin.name})`);
           break;
         }
       }
@@ -126,7 +135,7 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
   }
 
   if (!authorized) {
-    console.log(`❌ Not authorized: ${senderId} (digits: ${senderDigits}, resolved: ${resolvedPhone || 'null'}, botWid: ${botWid})`);
+    console.log(`❌ Not authorized: ${senderId} (digits: ${senderDigits}, clean: ${senderClean}, resolved: ${resolvedPhone || 'null'}, botWid: ${botWid})`);
     await reply(message, '❌ You are not authorized to use commands.', client);
     return true;
   }

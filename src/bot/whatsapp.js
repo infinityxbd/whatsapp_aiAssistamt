@@ -86,31 +86,114 @@ function cleanWid(id) {
   return String(id).replace(/@c\.us/, '').replace(/@lid/, '').replace(/@g\.us/, '');
 }
 
-// Lazy LID resolver — looks up a single contact on demand
+// Robust LID resolver — tries WWebJS internal modules first, then contact lookup
 async function resolveLid(senderId) {
+  const senderStr = String(senderId);
+  const lid = cleanWid(senderStr);
+
+  // Try pre-populated map first
+  if (botState.lidMap[lid]) {
+    console.log(`🔍 resolveLid cache: ${senderStr} → ${botState.lidMap[lid]}`);
+    return botState.lidMap[lid];
+  }
+
+  // Method 1: WWebJS internal WAWebLidMigrationUtils.toPn()
   try {
-    const contact = await client.getContactById(senderId);
-    if (contact) {
-      // Try phone number first
-      if (contact.number) {
-        const phone = contact.number.replace(/\D/g, '');
-        const lid = cleanWid(senderId);
-        if (phone && lid) {
-          botState.lidMap[lid] = phone;
-          botState.lidMap[phone] = lid;
-          console.log(`🔍 resolveLid: ${senderId} → phone: ${phone}`);
-          return phone;
+    const phone = await client.pupPage.evaluate((id) => {
+      try {
+        const Wids = window.require('WAWebWidFactory');
+        const LidMigration = window.require('WAWebLidMigrationUtils');
+        const wid = Wids.createWid(id);
+        if (wid && typeof wid.isLid === 'function' && wid.isLid()) {
+          const pn = LidMigration.toPn(wid);
+          if (pn) return pn._serialized || String(pn);
         }
-      }
-      // Try pushname as fallback
-      if (contact.pushname) {
-        console.log(`🔍 resolveLid: ${senderId} → pushname: ${contact.pushname}`);
+      } catch (e) {}
+      return null;
+    }, senderStr);
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, '');
+      botState.lidMap[lid] = cleanPhone;
+      botState.lidMap[cleanPhone] = lid;
+      console.log(`🔍 resolveLid (toPn): ${senderStr} → ${cleanPhone}`);
+      return cleanPhone;
+    }
+  } catch (e) {}
+
+  // Method 2: WWebJS contact store — iterate contacts to find LID match
+  try {
+    const result = await client.pupPage.evaluate((searchId) => {
+      try {
+        const Store = window.require('WAWebCollections');
+        const coll = Store.Contact?.getStoreModel?.()?.collection;
+        if (!coll) return null;
+        for (const c of coll) {
+          try {
+            const serialized = c.id?._serialized || String(c.id || '');
+            if (serialized === searchId) {
+              const phone = c.phonebookEntry?.iPN || c.number || '';
+              if (phone) return String(phone).replace(/\D/g, '');
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+      return null;
+    }, senderStr);
+    if (result) {
+      botState.lidMap[lid] = result;
+      botState.lidMap[result] = lid;
+      console.log(`🔍 resolveLid (store): ${senderStr} → ${result}`);
+      return result;
+    }
+  } catch (e) {}
+
+  // Method 3: client.getContactById()
+  try {
+    const contact = await client.getContactById(senderStr);
+    if (contact && contact.number) {
+      const phone = contact.number.replace(/\D/g, '');
+      if (phone) {
+        botState.lidMap[lid] = phone;
+        botState.lidMap[phone] = lid;
+        console.log(`🔍 resolveLid (contact): ${senderStr} → ${phone}`);
+        return phone;
       }
     }
-  } catch (e) {
-    console.log(`🔍 resolveLid failed for ${senderId}: ${e.message}`);
-  }
+  } catch (e) {}
+
+  console.log(`🔍 resolveLid: no result for ${senderStr}`);
   return null;
+}
+
+// Pre-populate LID map from all known contacts on startup
+async function prepopulateLidMap() {
+  try {
+    const pairs = await client.pupPage.evaluate(() => {
+      try {
+        const Store = window.require('WAWebCollections');
+        const coll = Store.Contact?.getStoreModel?.()?.collection;
+        if (!coll) return [];
+        const result = [];
+        for (const c of coll) {
+          try {
+            const serialized = c.id?._serialized || String(c.id || '');
+            const phone = c.phonebookEntry?.iPN || c.number || '';
+            const lid = serialized.replace(/@lid/, '').replace(/@c\.us/, '');
+            const cleanPhone = String(phone).replace(/\D/g, '');
+            if (lid && cleanPhone) result.push([lid, cleanPhone]);
+          } catch (e) {}
+        }
+        return result;
+      } catch (e) { return []; }
+    });
+    for (const [lid, phone] of pairs) {
+      botState.lidMap[lid] = phone;
+      botState.lidMap[phone] = lid;
+    }
+    console.log(`📋 LID map pre-populated: ${pairs.length} contacts`);
+  } catch (e) {
+    console.log(`📋 LID pre-populate skipped: ${e.message}`);
+  }
 }
 
 client.on('loading_screen', (percent, message) => {
@@ -143,6 +226,9 @@ client.on('ready', async () => {
   console.log(`🟢 Bot ONLINE! WID: ${botWid}`);
 
   try { await client.sendPresenceAvailable(); } catch (e) {}
+
+  // Pre-populate LID map from contacts
+  try { await prepopulateLidMap(); } catch (e) {}
 
   if (onlineInterval) clearInterval(onlineInterval);
   onlineInterval = setInterval(async () => {
