@@ -4,9 +4,17 @@
  * Co-Founder, Senior Admin @ Student Cyber Expert Force (SCEF)
  * Telegram: https://t.me/infinityxbd
  */
-require('dotenv').config();
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+
+if (!fs.existsSync(path.join(__dirname, 'node_modules'))) {
+  console.log('📦 Installing dependencies...');
+  execSync('npm install --production', { cwd: __dirname, stdio: 'inherit' });
+  console.log('✅ Dependencies installed\n');
+}
+
+require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { readJSON, writeJSON } = require('./src/storage/store');
 const createAdminServer = require('./src/admin/server');
