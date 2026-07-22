@@ -83,7 +83,11 @@
       flex: 1;
       margin-left: 240px;
       padding: 32px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
+    .main-content { flex: 1; }
     .tab { display: none; }
     .tab.active { display: block; }
 
@@ -322,6 +326,15 @@
     }
     .panel .helper { font-size: 12px; color: #8b949e; margin-top: 8px; }
 
+    .site-footer {
+      text-align: center;
+      padding: 16px 0;
+      margin-top: 32px;
+      font-size: 12px;
+      color: #555;
+      border-top: 1px solid rgba(37,211,102,0.08);
+    }
+
     /* Password */
     .strength {
       margin-top: 8px;
@@ -411,6 +424,7 @@
   </div>
 
   <div class="main">
+    <div class="main-content">
     <!-- Tab: Bot Settings -->
     <div class="tab active" id="tab-settings">
       <div class="section-header"><span class="icon">⚙️</span> Bot Settings</div>
@@ -618,9 +632,13 @@
         <button class="btn btn-primary btn-full" onclick="changePassword()">Update Password</button>
       </div>
     </div>
-  </div>
+    </div>
 
-  <!-- Modal: Add API Key -->
+    <div class="site-footer">
+      Developed by <b style="color:#25D366;">Tarif Ahmed</b> (infinityX) &nbsp;|&nbsp;
+      <a href="https://t.me/infinityxbd" target="_blank" style="color:#25D366;text-decoration:none;">@infinityxbd</a>
+    </div>
+  </div>
   <div class="modal-overlay" id="addKeyModal">
     <div class="modal">
       <h3>Add API Key</h3>
@@ -641,11 +659,6 @@
   </div>
 
   <div class="toast-container" id="toastContainer"></div>
-
-  <div style="position:fixed;bottom:0;left:240px;right:0;text-align:center;padding:10px;font-size:12px;color:#555;border-top:1px solid rgba(37,211,102,0.08);background:#080b12;z-index:999;">
-    Developed by <b style="color:#25D366;">Tarif Ahmed</b> (infinityX) &nbsp;|&nbsp;
-    <a href="https://t.me/infinityxbd" target="_blank" style="color:#25D366;text-decoration:none;">@infinityxbd</a>
-  </div>
 
   <script>
     // Toast
@@ -780,6 +793,7 @@
       const btn = document.getElementById('pairBtn');
       btn.textContent = '⏳ Getting code...';
       btn.disabled = true;
+      document.getElementById('pairingResult').style.display = 'none';
       try {
         const res = await fetch('/admin/api/whatsapp/pair', {
           method: 'POST',
@@ -791,32 +805,50 @@
         if (data.success) {
           document.getElementById('pairingCode').textContent = data.code;
           document.getElementById('pairingResult').style.display = 'block';
-          showToast('Pairing code generated!');
+          showToast('Pairing code generated! Enter it on your phone.');
+          startPairingPoll();
         } else {
           showToast(data.error || 'Failed to get code', 'error');
         }
       } catch(e) {
-        showToast('Failed to request pairing code', 'error');
+        showToast('Failed to request pairing code. Retry.', 'error');
       }
       btn.textContent = '🔑 Get Pairing Code';
       btn.disabled = false;
     }
 
+    let pairingPollInterval = null;
+    function startPairingPoll() {
+      if (pairingPollInterval) clearInterval(pairingPollInterval);
+      pairingPollInterval = setInterval(async () => {
+        try {
+          const res = await fetch('/admin/api/whatsapp/status', { credentials: 'same-origin' });
+          const data = await res.json();
+          if (data.connected) {
+            clearInterval(pairingPollInterval);
+            pairingPollInterval = null;
+            document.getElementById('pairingResult').style.display = 'none';
+            checkWhatsAppStatus();
+            showToast('✅ WhatsApp connected!');
+          }
+        } catch(e) {}
+      }, 3000);
+    }
+
     async function logoutWhatsApp() {
       if (!confirm('Logout WhatsApp? Bot will go offline and you can pair a new number.')) return;
+      if (pairingPollInterval) { clearInterval(pairingPollInterval); pairingPollInterval = null; }
       try {
         await fetch('/admin/api/whatsapp/logout', {
           method: 'POST', credentials: 'same-origin'
         });
         showToast('WhatsApp logged out');
-        // Hide pairing result, show disconnected with phone input
         document.getElementById('pairingResult').style.display = 'none';
         document.getElementById('waConnected').style.display = 'none';
         document.getElementById('waDisconnected').style.display = 'block';
         document.getElementById('waStatusDot').classList.remove('online');
         document.getElementById('waStatusText').textContent = 'Not Connected';
         document.getElementById('waStatusText').style.color = '#f85149';
-        // Auto refresh after client re-inits
         setTimeout(checkWhatsAppStatus, 5000);
       } catch(e) { showToast('Failed to logout', 'error'); }
     }
@@ -828,7 +860,6 @@
           method: 'POST', credentials: 'same-origin'
         });
         setTimeout(checkWhatsAppStatus, 5000);
-        showToast('WhatsApp restarting...');
       } catch(e) { showToast('Failed to restart', 'error'); }
     }
 

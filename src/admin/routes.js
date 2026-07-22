@@ -227,9 +227,21 @@ function createRoutes(botState, client) {
       return res.status(400).json({ error: 'Invalid phone number' });
     }
 
-    // Wait up to 15s for client to be ready after reinit
+    // If client page is closed or crashed, reinit first
+    const pageClosed = !client.pupPage || client.pupPage.isClosed();
+    if (pageClosed) {
+      console.log('🔄 Client page closed — reinitializing...');
+      try { await client.destroy(); } catch (e) {}
+      botState.status = 'offline';
+      await new Promise(r => setTimeout(r, 2000));
+      try { await client.initialize(); } catch (e) {
+        return res.status(500).json({ error: 'Failed to restart client: ' + e.message });
+      }
+    }
+
+    // Wait up to 20s for client to be ready
     let ready = false;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 40; i++) {
       if (client && client.pupPage && !client.pupPage.isClosed()) {
         ready = true;
         break;
@@ -403,6 +415,7 @@ function createRoutes(botState, client) {
   router.post('/api/factory-reset', async (req, res) => {
     const fs = require('fs');
     const path = require('path');
+    const bcrypt2 = require('bcryptjs');
     const dataDir = path.join(__dirname, '../../data');
 
     try {
@@ -419,6 +432,7 @@ function createRoutes(botState, client) {
       }
 
       // Reset all data files to defaults
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
       const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.json'));
       for (const file of files) {
         const filePath = path.join(dataDir, file);
@@ -433,8 +447,28 @@ function createRoutes(botState, client) {
       console.log('🔴 FACTORY RESET — All data wiped');
       res.json({ success: true, message: 'All data cleared. Bot will restart.' });
 
-      // Reinit after response sent
+      // Re-create default data files + reinit client after response sent
       setTimeout(async () => {
+        try {
+          // Recreate config.json with fresh password
+          const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+          const hash = await bcrypt2.hash(defaultPassword, 10);
+          writeJSON('config.json', {
+            adminPasswordHash: hash,
+            botPrompt: 'You are a helpful WhatsApp assistant. Reply naturally and concisely. Be friendly.',
+            replyToInbox: true,
+            replyToGroups: false,
+            botName: 'AI Assistant',
+            botEnabled: true
+          });
+          writeJSON('apikeys.json', []);
+          writeJSON('blocklist.json', { numbers: [], groups: [] });
+          writeJSON('adminusers.json', []);
+          console.log('📁 Default data files recreated');
+        } catch (e) {
+          console.error('❌ Failed to recreate data files:', e.message);
+        }
+
         try { await client.initialize(); } catch (e) {
           console.error('❌ Reinit after reset failed:', e.message);
         }
