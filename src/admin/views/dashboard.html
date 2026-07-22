@@ -682,11 +682,12 @@
       <label>API Name</label>
       <input type="text" id="aiApiName" placeholder="e.g. DeepSeek API, Gemini Flash">
       <label>Provider Type</label>
-      <select id="aiApiProvider" class="sel">
+      <select id="aiApiProvider" class="sel" onchange="onProviderTypeChange()">
         <option value="openai-compatible">OpenAI Compatible</option>
         <option value="openai-official">OpenAI Official</option>
         <option value="gemini">Google Gemini</option>
         <option value="anthropic">Anthropic Claude</option>
+        <option value="1min-ai">1min.ai</option>
         <option value="custom-rest">Custom REST API</option>
         <option value="custom-json">Custom JSON API</option>
       </select>
@@ -1287,6 +1288,7 @@
           'openai-official': 'OpenAI Official',
           'gemini': 'Google Gemini',
           'anthropic': 'Anthropic Claude',
+          '1min-ai': '1min.ai',
           'custom-rest': 'Custom REST',
           'custom-json': 'Custom JSON'
         };
@@ -1332,6 +1334,18 @@
       document.getElementById('aiApiRequestTemplate').value = '';
       document.getElementById('aiApiResponsePath').value = '';
       document.getElementById('aiApiModal').classList.add('show');
+    }
+
+    function onProviderTypeChange() {
+      const type = document.getElementById('aiApiProvider').value;
+      const endpoint = document.getElementById('aiApiEndpoint');
+      const model = document.getElementById('aiApiModel');
+      const authType = document.getElementById('aiApiAuthType');
+      if (type === '1min-ai' && !endpoint.value) {
+        endpoint.value = 'https://api.1min.ai/api/chat-with-ai';
+        if (!model.value) model.value = 'gpt-4o-mini';
+        authType.value = 'api-key-upper';
+      }
     }
 
     function hideAIApiModal() {
@@ -1461,6 +1475,7 @@
         const providerLabels = {
           'openai-compatible': 'OpenAI Compatible', 'openai-official': 'OpenAI Official',
           'gemini': 'Google Gemini', 'anthropic': 'Anthropic Claude',
+          '1min-ai': '1min.ai',
           'custom-rest': 'Custom REST', 'custom-json': 'Custom JSON'
         };
 

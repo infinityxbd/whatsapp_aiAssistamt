@@ -7,6 +7,7 @@ const OpenAICompatibleProvider = require('./openai-compatible');
 const GeminiProvider = require('./gemini');
 const AnthropicProvider = require('./anthropic');
 const CustomProvider = require('./custom');
+const OneMinProvider = require('./1min');
 
 function createProvider(apiConfig) {
   const config = {
@@ -35,6 +36,8 @@ function createProvider(apiConfig) {
       return new GeminiProvider(config);
     case 'anthropic':
       return new AnthropicProvider(config);
+    case '1min-ai':
+      return new OneMinProvider(config);
     case 'custom-rest':
     case 'custom-json':
       return new CustomProvider(config);
