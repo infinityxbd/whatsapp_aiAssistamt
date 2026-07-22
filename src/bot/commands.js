@@ -16,10 +16,17 @@ function isAdminUser(senderId) {
     return null;
   }
   const senderClean = cleanId(senderId);
+  const senderDigits = senderId.replace(/\D/g, '');
+
   for (const u of adminUsers) {
     if (!u || !u.number) continue;
+    // Exact clean match
     if (cleanId(u.number) === senderClean) return u;
+    // LID match
     if (u.lid && cleanId(u.lid) === senderClean) return u;
+    // Digit-only match (most reliable for LID vs phone)
+    const adminDigits = u.number.replace(/\D/g, '');
+    if (adminDigits && senderDigits && adminDigits === senderDigits) return u;
   }
   return null;
 }
@@ -50,17 +57,18 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
   const senderId = commandSenderId || message.from;
   console.log(`🔍 Command: "${body}" from ${senderId} (chat: ${message.from})`);
 
-  // Step 1: Resolve sender to phone number if it's a LID
+  // Step 1: Try to resolve sender LID → phone
   let resolvedPhone = null;
   const senderClean = cleanId(senderId);
+  const senderDigits = senderId.replace(/\D/g, '');
 
-  // Check LidMap cache first
+  // Check LidMap cache
   if (lidMap && lidMap[senderClean]) {
     resolvedPhone = lidMap[senderClean];
-    console.log(`🔍 LID cache hit: ${senderClean} → ${resolvedPhone}`);
+    console.log(`🔍 LID cache: ${senderClean} → ${resolvedPhone}`);
   }
 
-  // If not in cache, try resolving via contact lookup
+  // Try resolving via contact lookup
   if (!resolvedPhone) {
     try {
       const { resolveLid } = require('./whatsapp');
@@ -71,72 +79,46 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
     } catch (e) {}
   }
 
-  // Step 2: Also resolve botWid to make comparison consistent
-  let botPhone = null;
-  const botClean = cleanId(botWid || '');
-  if (lidMap && lidMap[botClean]) {
-    botPhone = lidMap[botClean];
-  }
-  if (!botPhone) {
-    try {
-      const { resolveLid } = require('./whatsapp');
-      botPhone = await resolveLid(botWid);
-    } catch (e) {}
-  }
-  const effectiveBotClean = botPhone ? cleanId(botPhone) : botClean;
-
-  // Step 3: Check authorization
+  // Step 2: Check authorization
   let authorized = false;
   let isOwner = false;
 
-  // 3a. Direct phone match (sender = bot owner)
-  const effectiveSenderClean = resolvedPhone ? cleanId(resolvedPhone) : senderClean;
-  if (effectiveSenderClean === effectiveBotClean) {
+  // 2a. Owner check — match sender digits with botWid digits
+  const botDigits = (botWid || '').replace(/\D/g, '');
+  if (senderDigits && botDigits && senderDigits === botDigits) {
     authorized = true;
     isOwner = true;
-    console.log(`🟢 Owner match: ${effectiveSenderClean}`);
+    console.log(`🟢 Owner match (digits): ${senderDigits}`);
   }
 
-  // 3b. Admin check with resolved phone
+  // 2b. Owner check via resolved phone
   if (!authorized && resolvedPhone) {
-    const admin = isAdminUser(resolvedPhone);
-    if (admin) {
-      authorized = true;
-      console.log(`👤 Admin match via resolved phone: ${resolvedPhone}`);
-    }
-  }
-
-  // 3c. Direct admin check (number already stored in exact format)
-  if (!authorized) {
-    const admin = isAdminUser(senderId);
-    if (admin) {
-      authorized = true;
-      console.log(`👤 Admin match via direct check: ${senderId}`);
-    }
-  }
-
-  // 3d. Fuzzy number extraction — strip all non-digits and try matching
-  if (!authorized) {
-    const senderDigits = senderId.replace(/\D/g, '');
-    const botDigits = (botWid || '').replace(/\D/g, '');
-    if (senderDigits && botDigits && senderDigits === botDigits) {
+    const rpDigits = resolvedPhone.replace(/\D/g, '');
+    if (rpDigits && botDigits && rpDigits === botDigits) {
       authorized = true;
       isOwner = true;
-      console.log(`🟢 Owner match (digits): ${senderDigits}`);
+      console.log(`🟢 Owner match (resolved phone): ${resolvedPhone}`);
     }
   }
 
-  // 3e. Check if sender digits match any admin number digits
+  // 2c. Admin check — use the improved isAdminUser (has digit matching)
   if (!authorized) {
-    const senderDigits = senderId.replace(/\D/g, '');
-    if (senderDigits) {
-      const adminUsers = readJSON('adminusers.json') || [];
-      for (const u of adminUsers) {
-        if (!u || !u.number) continue;
-        const adminDigits = u.number.replace(/\D/g, '');
-        if (adminDigits && senderDigits === adminDigits) {
+    const admin = isAdminUser(senderId) || (resolvedPhone ? isAdminUser(resolvedPhone) : null);
+    if (admin) {
+      authorized = true;
+      console.log(`👤 Admin match: ${admin.number} (${admin.name})`);
+    }
+  }
+
+  // 2d. Try matching with LID map entries
+  if (!authorized && lidMap) {
+    for (const [key, val] of Object.entries(lidMap)) {
+      const valDigits = String(val).replace(/\D/g, '');
+      if (valDigits && senderDigits && valDigits === senderDigits) {
+        const admin = isAdminUser(val);
+        if (admin) {
           authorized = true;
-          console.log(`👤 Admin match (digits): ${senderDigits} = ${adminDigits}`);
+          console.log(`👤 Admin match via LID map: ${val}`);
           break;
         }
       }
@@ -144,7 +126,7 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
   }
 
   if (!authorized) {
-    console.log(`❌ Not authorized: ${senderId} (resolved: ${resolvedPhone || 'null'}, botWid: ${botWid})`);
+    console.log(`❌ Not authorized: ${senderId} (digits: ${senderDigits}, resolved: ${resolvedPhone || 'null'}, botWid: ${botWid})`);
     await reply(message, '❌ You are not authorized to use commands.', client);
     return true;
   }

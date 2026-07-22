@@ -45,33 +45,23 @@ function addToHistory(chatId, role, text) {
 async function sendMessage(chatId, text, message, client) {
   const msgId = message.id._serialized || message.id.id || message.id;
 
-  // Method 1: message.reply() — most reliable for quoted replies
+  // Method 1: client.sendMessage with quotedMessageId (library's built-in, most reliable)
+  try {
+    await client.sendMessage(chatId, text, { quotedMessageId: msgId });
+    return true;
+  } catch (e1) {
+    console.log(`⚠️ Quote method 1 (sendMessage quoted) failed: ${e1.message}`);
+  }
+
+  // Method 2: message.reply() fallback
   try {
     await message.reply(text);
     return true;
-  } catch (e1) {
-    console.log(`⚠️ Quote method 1 (message.reply) failed: ${e1.message}`);
-  }
-
-  // Method 2: WWebJS internal API — send via WhatsApp Web stores
-  try {
-    const sent = await client.pupPage.evaluate(async (chatId, text, quotedMsgId) => {
-      try {
-        const msg = window.Store.Msg.get(quotedMsgId);
-        if (msg) {
-          const chat = window.Store.Chat.get(chatId);
-          await chat.sendMsg(text, { quotedMsg: msg });
-          return true;
-        }
-      } catch (e) {}
-      return false;
-    }, chatId, text, msgId);
-    if (sent) return true;
   } catch (e2) {
-    console.log(`⚠️ Quote method 2 (WWebJS internal) failed: ${e2.message}`);
+    console.log(`⚠️ Quote method 2 (message.reply) failed: ${e2.message}`);
   }
 
-  // Method 3: chat.sendMessage with quotedMessageId option
+  // Method 3: chat.sendMessage with quotedMessageId
   try {
     const chat = await client.getChatById(chatId);
     await chat.sendMessage(text, { quotedMessageId: msgId });

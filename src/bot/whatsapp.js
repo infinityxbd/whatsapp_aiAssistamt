@@ -90,16 +90,26 @@ function cleanWid(id) {
 async function resolveLid(senderId) {
   try {
     const contact = await client.getContactById(senderId);
-    if (contact && contact.number) {
-      const phone = contact.number.replace(/\D/g, '');
-      const lid = cleanWid(senderId);
-      if (phone && lid) {
-        botState.lidMap[lid] = phone;
-        botState.lidMap[phone] = lid;
-        return phone;
+    if (contact) {
+      // Try phone number first
+      if (contact.number) {
+        const phone = contact.number.replace(/\D/g, '');
+        const lid = cleanWid(senderId);
+        if (phone && lid) {
+          botState.lidMap[lid] = phone;
+          botState.lidMap[phone] = lid;
+          console.log(`🔍 resolveLid: ${senderId} → phone: ${phone}`);
+          return phone;
+        }
+      }
+      // Try pushname as fallback
+      if (contact.pushname) {
+        console.log(`🔍 resolveLid: ${senderId} → pushname: ${contact.pushname}`);
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log(`🔍 resolveLid failed for ${senderId}: ${e.message}`);
+  }
   return null;
 }
 
