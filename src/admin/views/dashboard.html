@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp AI Bot — Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #080b12;
+      color: #e6edf3;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 240px;
+      background: #0d1117;
+      border-right: 1px solid rgba(37,211,102,0.12);
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid rgba(37,211,102,0.12);
+      margin-bottom: 16px;
+    }
+    .sidebar-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e6edf3;
+      margin-bottom: 8px;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f85149;
+    }
+    .status-dot.online { background: #25D366; }
+    .nav-links {
+      flex: 1;
+      padding: 0 12px;
+    }
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #8b949e;
+      font-size: 14px;
+      transition: all 0.2s;
+      margin-bottom: 2px;
+      text-decoration: none;
+    }
+    .nav-link:hover { background: rgba(37,211,102,0.08); color: #e6edf3; }
+    .nav-link.active { background: rgba(37,211,102,0.12); color: #25D366; }
+    .nav-link .icon { font-size: 18px; width: 24px; text-align: center; }
+    .nav-bottom {
+      padding: 0 12px;
+      border-top: 1px solid rgba(37,211,102,0.12);
+      padding-top: 12px;
+    }
+    .nav-link.logout { color: #f85149; }
+    .nav-link.logout:hover { background: rgba(248,81,73,0.1); }
+
+    /* Main */
+    .main {
+      flex: 1;
+      margin-left: 240px;
+      padding: 32px;
+    }
+    .tab { display: none; }
+    .tab.active { display: block; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+    .section-header .icon { font-size: 24px; }
+
+    .card {
+      background: #161b22;
+      border: 1px solid rgba(37,211,102,0.12);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    label {
+      display: block;
+      color: #8b949e;
+      font-size: 13px;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+    label:first-child { margin-top: 0; }
+
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0d1117;
+      border: 1px solid rgba(37,211,102,0.2);
+      border-radius: 8px;
+      color: #e6edf3;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, textarea:focus { border-color: #25D366; }
+    textarea { resize: vertical; min-height: 150px; }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-primary { background: #25D366; color: #fff; }
+    .btn-primary:hover { background: #20bd5a; }
+    .btn-danger { background: #f85149; color: #fff; }
+    .btn-danger:hover { background: #da3633; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid rgba(37,211,102,0.3);
+      color: #25D366;
+    }
+    .btn-outline:hover { background: rgba(37,211,102,0.1); }
+    .btn-full { width: 100%; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* Toggle Switch */
+    .toggle-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #161b22;
+      border: 1px solid rgba(37,211,102,0.12);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+    }
+    .toggle-info { flex: 1; margin-right: 16px; }
+    .toggle-info .title { font-size: 15px; font-weight: 600; color: #e6edf3; }
+    .toggle-info .desc { font-size: 13px; color: #8b949e; margin-top: 4px; }
+    .toggle-info .note { font-size: 12px; color: #f85149; margin-top: 4px; }
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input { display: none; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #30363d;
+      border-radius: 13px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.3s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background: #25D366; }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(22px); }
+
+    /* Table */
+    .table-wrapper { overflow-x: auto; margin-top: 16px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid rgba(37,211,102,0.08);
+      font-size: 13px;
+    }
+    th { color: #8b949e; font-weight: 500; }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-active { background: rgba(37,211,102,0.15); color: #25D366; }
+    .badge-disabled { background: rgba(139,148,158,0.15); color: #8b949e; }
+    .badge-error { background: rgba(248,81,73,0.15); color: #f85149; }
+    .badge-ok { background: rgba(37,211,102,0.15); color: #25D366; }
+    .badge-warn { background: rgba(210,153,34,0.15); color: #d29922; }
+    .status-row { display: flex; align-items: center; gap: 6px; }
+    .status-icon { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-icon.ok { background: #25D366; }
+    .status-icon.error { background: #f85149; }
+    .status-icon.unknown { background: #8b949e; }
+    .key-error-msg { font-size: 11px; color: #f85149; margin-top: 2px; max-width: 200px; }
+    .contact-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: #0d1117; border-radius: 8px;
+      margin-bottom: 6px; transition: background 0.2s;
+    }
+    .contact-item:hover { background: #161b22; }
+    .contact-info { flex: 1; }
+    .contact-name { font-size: 14px; color: #e6edf3; font-weight: 500; }
+    .contact-number { font-size: 12px; color: #8b949e; margin-top: 2px; }
+    .contact-actions { display: flex; gap: 6px; }
+    .contact-blocked { opacity: 0.5; }
+    .contact-blocked .contact-name::after { content: ' (BLOCKED)'; color: #f85149; font-size: 11px; }
+
+    .info-banner {
+      background: rgba(37,211,102,0.08);
+      border: 1px solid rgba(37,211,102,0.15);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #8b949e;
+      margin-bottom: 16px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #8b949e;
+      font-size: 14px;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #161b22;
+      border: 1px solid rgba(37,211,102,0.15);
+      border-radius: 12px;
+      padding: 24px;
+      width: 450px;
+      max-width: 90vw;
+    }
+    .modal h3 { margin-bottom: 16px; font-size: 18px; }
+    .modal .helper { font-size: 12px; color: #8b949e; margin-top: 4px; }
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    /* Block List */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .panel { }
+    .panel h3 { font-size: 15px; margin-bottom: 12px; color: #e6edf3; }
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .input-row input { flex: 1; }
+    .block-list { list-style: none; }
+    .block-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #0d1117;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    .block-list .remove-btn {
+      background: none;
+      border: none;
+      color: #f85149;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .panel .helper { font-size: 12px; color: #8b949e; margin-top: 8px; }
+
+    /* Password */
+    .strength {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .strength.weak { color: #f85149; }
+    .strength.fair { color: #d29922; }
+    .strength.strong { color: #25D366; }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #fff;
+      animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+      min-width: 250px;
+    }
+    .toast-success { background: #25D366; }
+    .toast-error { background: #f85149; }
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; overflow: hidden; }
+      .sidebar-header h2, .nav-link span:not(.icon), .status-indicator span:not(.status-dot) { display: none; }
+      .main { margin-left: 60px; padding: 16px; }
+      .panels { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2 id="botNameSidebar">AI Assistant</h2>
+      <div class="status-indicator">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Offline</span>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a class="nav-link active" data-tab="settings" onclick="switchTab('settings', this)">
+        <span class="icon">⚙️</span><span>Bot Settings</span>
+      </a>
+      <a class="nav-link" data-tab="replies" onclick="switchTab('replies', this)">
+        <span class="icon">💬</span><span>Reply Settings</span>
+      </a>
+      <a class="nav-link" data-tab="keys" onclick="switchTab('keys', this)">
+        <span class="icon">🔑</span><span>API Keys</span>
+      </a>
+      <a class="nav-link" data-tab="blocklist" onclick="switchTab('blocklist', this)">
+        <span class="icon">🚫</span><span>Block List</span>
+      </a>
+      <a class="nav-link" data-tab="whatsapp" onclick="switchTab('whatsapp', this)">
+        <span class="icon">📱</span><span>WhatsApp Login</span>
+      </a>
+      <a class="nav-link" data-tab="adminusers" onclick="switchTab('adminusers', this)">
+        <span class="icon">👤</span><span>Admin Users</span>
+      </a>
+      <a class="nav-link" data-tab="password" onclick="switchTab('password', this)">
+        <span class="icon">🔐</span><span>Change Password</span>
+      </a>
+    </div>
+    <div class="nav-bottom">
+      <a class="nav-link logout" onclick="logout()">
+        <span class="icon">🚪</span><span>Logout</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- Tab: Bot Settings -->
+    <div class="tab active" id="tab-settings">
+      <div class="section-header"><span class="icon">⚙️</span> Bot Settings</div>
+      <div class="toggle-card" style="margin-bottom:20px; border-color: rgba(37,211,102,0.3);">
+        <div class="toggle-info">
+          <div class="title" style="font-size:17px;">🟢 Bot Power</div>
+          <div class="desc">ON = Bot online, replies to messages &nbsp;|&nbsp; OFF = Bot offline, ignores all messages</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggleBotEnabled" onchange="toggleBotEnabled()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="card">
+        <label>Bot Name</label>
+        <input type="text" id="botName" placeholder="e.g. AI Assistant">
+        <label>AI Personality Prompt</label>
+        <textarea id="botPrompt" placeholder="Describe how the bot should behave and respond..."></textarea>
+        <br><br>
+        <button class="btn btn-primary btn-full" onclick="saveSettings()">Save Settings</button>
+      </div>
+      <div class="card" style="margin-top:20px; border-color: rgba(248,81,73,0.3);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:#f85149;">⚠️ Factory Reset</div>
+            <div style="font-size:13px;color:#8b949e;margin-top:4px;">Clear ALL data — admin users, API keys, blocklist, password, session. Bot will restart fresh.</div>
+          </div>
+          <button class="btn btn-danger" onclick="factoryReset()" id="factoryResetBtn">Factory Reset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Reply Settings -->
+    <div class="tab" id="tab-replies">
+      <div class="section-header"><span class="icon">💬</span> Reply Settings</div>
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="title">📥 Private Message Replies</div>
+          <div class="desc">Reply to direct messages sent to your number</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggleInbox" onchange="saveReplySettings()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="toggle-card">
+        <div class="toggle-info">
+          <div class="title">👥 Group Message Replies</div>
+          <div class="desc">Reply to messages in WhatsApp groups</div>
+          <div class="note">Caution: enabling this will reply in ALL groups (unless blocked below)</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggleGroups" onchange="saveReplySettings()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Tab: API Keys -->
+    <div class="tab" id="tab-keys">
+      <div class="section-header"><span class="icon">🔑</span> API Keys</div>
+      <div class="info-banner">
+        Add multiple keys for automatic fallback. Keys are tried in order — if one fails, the next is used. Click <b>Check All</b> to test which keys work.
+      </div>
+      <div class="header-row">
+        <button class="btn btn-outline btn-sm" onclick="checkAllKeys()" id="checkAllBtn">🔍 Check All Keys</button>
+        <button class="btn btn-primary btn-sm" onclick="showModal()">+ Add New Key</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Model</th><th>API Key</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="keysTable"></tbody>
+        </table>
+        <div class="empty-state" id="keysEmpty">No API keys added yet. Add your first Gemini API key to get started.</div>
+      </div>
+    </div>
+
+    <!-- Tab: Block List -->
+    <div class="tab" id="tab-blocklist">
+      <div class="section-header"><span class="icon">🚫</span> Block List</div>
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="searchContactInput" placeholder="🔍 Search contacts by name or number..." oninput="searchContacts()" style="flex:1;">
+          <button class="btn btn-outline btn-sm" onclick="loadAllContacts()">Show All</button>
+        </div>
+        <div id="contactSearchResults"></div>
+        <div class="empty-state" id="contactSearchEmpty">Type a name or number to search contacts</div>
+      </div>
+      <div class="panels">
+        <div class="panel card">
+          <h3>🚫 Blocked Numbers <span id="blockedNumCount" class="badge badge-disabled">0</span></h3>
+          <div class="input-row">
+            <input type="text" id="blockNumberInput" placeholder="8801XXXXXXXXX (country code, no +)">
+            <button class="btn btn-danger btn-sm" onclick="blockNumber()">Block</button>
+          </div>
+          <ul class="block-list" id="blockedNumbers"></ul>
+          <div class="empty-state" id="numbersEmpty">No blocked numbers</div>
+        </div>
+        <div class="panel card">
+          <h3>🚫 Blocked Groups <span id="blockedGrpCount" class="badge badge-disabled">0</span></h3>
+          <div class="input-row">
+            <input type="text" id="blockGroupInput" placeholder="Group ID from WhatsApp">
+            <button class="btn btn-danger btn-sm" onclick="blockGroup()">Block</button>
+          </div>
+          <ul class="block-list" id="blockedGroups"></ul>
+          <div class="empty-state" id="groupsEmpty">No blocked groups</div>
+          <p class="helper">Tip: Search contacts above to find and block numbers quickly.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Admin Users -->
+    <div class="tab" id="tab-adminusers">
+      <div class="section-header"><span class="icon">👤</span> Admin Users</div>
+      <div class="info-banner">
+        Add WhatsApp numbers as admin. Admin users can control the bot using chat commands like <b>/offbot</b>, <b>/onbot</b>, <b>/block</b>, <b>/blocklist</b>, <b>/unblock</b>, <b>/gplist</b>
+      </div>
+      <div class="card" style="max-width:600px;margin-bottom:16px;">
+        <label>WhatsApp Number (with country code)</label>
+        <input type="text" id="adminUserNumber" placeholder="8801XXXXXXXXX">
+        <label>Name (optional)</label>
+        <input type="text" id="adminUserName" placeholder="e.g. Owner, Main Admin">
+        <br><br>
+        <button class="btn btn-primary btn-full" onclick="addAdminUser()">+ Add Admin User</button>
+      </div>
+      <div class="card" style="max-width:600px;">
+        <h3 style="margin-bottom:12px;">Admin Users List</h3>
+        <div id="adminUsersList"></div>
+        <div class="empty-state" id="adminUsersEmpty">No admin users added yet</div>
+      </div>
+      <div class="card" style="max-width:600px;margin-top:16px;">
+        <h3 style="margin-bottom:12px;">📋 Available Commands</h3>
+        <div style="font-size:13px;color:#8b949e;line-height:2;">
+          <code style="color:#25D366">/offbot</code> — Bot off kore, kono reply dibe na<br>
+          <code style="color:#25D366">/onbot</code> — Bot on kore, reply dite shuru korbe<br>
+          <code style="color:#25D366">/block 8801XXXXXXXXX</code> — Number block kore<br>
+          <code style="color:#25D366">/blocklist</code> — Shob blocked numbers/groups dekhabe<br>
+          <code style="color:#25D366">/unblock 8801XXXXXXXXX</code> — Number unblock kore<br>
+          <code style="color:#25D366">/unblock 120363XXX@g.us</code> — Group unblock kore<br>
+          <code style="color:#25D366">/gplist</code> — Shob groups name + ID soho dekhabe
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: WhatsApp Login -->
+    <div class="tab" id="tab-whatsapp">
+      <div class="section-header"><span class="icon">📱</span> WhatsApp Login</div>
+      <div class="card" style="max-width:500px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+          <div class="status-dot" id="waStatusDot"></div>
+          <span id="waStatusText" style="font-size:15px;font-weight:600;">Checking...</span>
+        </div>
+
+        <div id="waDisconnected" style="display:none;">
+          <div class="info-banner" style="background:rgba(248,81,73,0.08);border-color:rgba(248,81,73,0.15);">
+            ⚠️ WhatsApp is not connected. Enter your number below to get a pairing code.
+          </div>
+          <label>Your WhatsApp Number (with country code)</label>
+          <input type="text" id="waPhoneNumber" placeholder="8801XXXXXXXXX" maxlength="15">
+          <br><br>
+          <button class="btn btn-primary btn-full" onclick="requestPairingCode()" id="pairBtn">
+            🔑 Get Pairing Code
+          </button>
+          <div id="pairingResult" style="display:none;margin-top:20px;text-align:center;">
+            <div class="info-banner" style="background:rgba(37,211,102,0.08);border-color:rgba(37,211,102,0.15);">
+              Your pairing code:
+            </div>
+            <div id="pairingCode" style="font-size:32px;font-weight:700;letter-spacing:4px;color:#25D366;margin:16px 0;"></div>
+            <div style="font-size:13px;color:#8b949e;line-height:1.6;">
+              1. Open WhatsApp on your phone<br>
+              2. Go to <b>Settings → Linked Devices</b><br>
+              3. Tap <b>Link a Device</b><br>
+              4. Tap <b>Link with Phone Number</b><br>
+              5. Enter the code above
+            </div>
+          </div>
+        </div>
+
+        <div id="waConnected" style="display:none;">
+          <div class="info-banner">
+            ✅ WhatsApp is connected and working. Bot is online.
+          </div>
+          <div style="display:flex;gap:8px;margin-top:16px;">
+            <button class="btn btn-outline" onclick="restartWhatsApp()">🔄 Restart</button>
+            <button class="btn btn-danger" onclick="logoutWhatsApp()">🚪 Logout</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Change Password -->
+    <div class="tab" id="tab-password">
+      <div class="section-header"><span class="icon">🔐</span> Change Password</div>
+      <div class="card" style="max-width:450px;">
+        <label>Current Password</label>
+        <input type="password" id="currentPwd" placeholder="Enter current password">
+        <label>New Password</label>
+        <input type="password" id="newPwd" placeholder="Enter new password" oninput="checkStrength()">
+        <label>Confirm New Password</label>
+        <input type="password" id="confirmPwd" placeholder="Confirm new password">
+        <div class="strength" id="pwdStrength"></div>
+        <br>
+        <button class="btn btn-primary btn-full" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add API Key -->
+  <div class="modal-overlay" id="addKeyModal">
+    <div class="modal">
+      <h3>Add API Key</h3>
+      <label>Key Name</label>
+      <input type="text" id="keyName" placeholder="e.g. Gemini Key 1">
+      <label>API Key</label>
+      <input type="text" id="keyValue" placeholder="AIzaSy...">
+      <label>Endpoint URL</label>
+      <input type="text" id="keyEndpoint" value="https://generativelanguage.googleapis.com">
+      <label>Model Name</label>
+      <input type="text" id="keyModel" value="gemini-1.5-flash">
+      <div class="helper">Common models: gemini-1.5-flash, gemini-1.5-pro, gemini-pro</div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="hideModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="addKey()">Add Key</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <div style="position:fixed;bottom:0;left:240px;right:0;text-align:center;padding:10px;font-size:12px;color:#555;border-top:1px solid rgba(37,211,102,0.08);background:#080b12;z-index:999;">
+    Developed by <b style="color:#25D366;">Tarif Ahmed</b> (infinityX) &nbsp;|&nbsp;
+    <a href="https://t.me/infinityxbd" target="_blank" style="color:#25D366;text-decoration:none;">@infinityxbd</a>
+  </div>
+
+  <script>
+    // Toast
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Tab switching
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      el.classList.add('active');
+      if (tab === 'keys') loadKeys();
+      if (tab === 'blocklist') loadBlocklist();
+      if (tab === 'whatsapp') checkWhatsAppStatus();
+      if (tab === 'adminusers') loadAdminUsers();
+    }
+
+    // Status polling
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/admin/api/status', { credentials: 'same-origin' });
+        const data = await res.json();
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if (data.status === 'online') {
+          dot.classList.add('online');
+          text.textContent = 'Online';
+        } else {
+          dot.classList.remove('online');
+          text.textContent = 'Offline';
+        }
+      } catch(e) {}
+    }
+
+    // Admin Users
+    async function loadAdminUsers() {
+      try {
+        const res = await fetch('/admin/api/admin-users', { credentials: 'same-origin' });
+        const users = await res.json();
+        const list = document.getElementById('adminUsersList');
+        const empty = document.getElementById('adminUsersEmpty');
+
+        if (users.length === 0) {
+          list.innerHTML = '';
+          empty.style.display = 'block';
+          return;
+        }
+        empty.style.display = 'none';
+        list.innerHTML = users.map(u => `
+          <div class="contact-item">
+            <div class="contact-info">
+              <div class="contact-name">👤 ${u.name}</div>
+              <div class="contact-number">${u.number.replace('@c.us','')}</div>
+            </div>
+            <div class="contact-actions">
+              <button class="btn btn-danger btn-sm" onclick="deleteAdminUser('${u.id}')">Remove</button>
+            </div>
+          </div>
+        `).join('');
+      } catch(e) {}
+    }
+
+    async function addAdminUser() {
+      const number = document.getElementById('adminUserNumber').value.trim();
+      const name = document.getElementById('adminUserName').value.trim();
+      if (!number) return showToast('Enter a phone number', 'error');
+      try {
+        const res = await fetch('/admin/api/admin-users', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number, name })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Admin user added!');
+          document.getElementById('adminUserNumber').value = '';
+          document.getElementById('adminUserName').value = '';
+          loadAdminUsers();
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch(e) { showToast('Failed to add admin user', 'error'); }
+    }
+
+    async function deleteAdminUser(id) {
+      if (!confirm('Remove this admin user?')) return;
+      await fetch('/admin/api/admin-users/' + id, { method: 'DELETE', credentials: 'same-origin' });
+      showToast('Admin user removed');
+      loadAdminUsers();
+    }
+
+    // WhatsApp Login
+    async function checkWhatsAppStatus() {
+      try {
+        const res = await fetch('/admin/api/whatsapp/status', { credentials: 'same-origin' });
+        const data = await res.json();
+        const dot = document.getElementById('waStatusDot');
+        const text = document.getElementById('waStatusText');
+        const disconnected = document.getElementById('waDisconnected');
+        const connected = document.getElementById('waConnected');
+
+        disconnected.style.display = 'none';
+        connected.style.display = 'none';
+
+        if (data.connected) {
+          dot.classList.add('online');
+          text.textContent = 'Connected';
+          text.style.color = '#25D366';
+          connected.style.display = 'block';
+        } else {
+          dot.classList.remove('online');
+          text.textContent = 'Not Connected';
+          text.style.color = '#f85149';
+          disconnected.style.display = 'block';
+        }
+      } catch(e) {
+        document.getElementById('waStatusText').textContent = 'Error checking status';
+      }
+    }
+
+    async function requestPairingCode() {
+      const phone = document.getElementById('waPhoneNumber').value.trim();
+      if (!phone) return showToast('Enter your phone number', 'error');
+      const btn = document.getElementById('pairBtn');
+      btn.textContent = '⏳ Getting code...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/admin/api/whatsapp/pair', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber: phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('pairingCode').textContent = data.code;
+          document.getElementById('pairingResult').style.display = 'block';
+          showToast('Pairing code generated!');
+        } else {
+          showToast(data.error || 'Failed to get code', 'error');
+        }
+      } catch(e) {
+        showToast('Failed to request pairing code', 'error');
+      }
+      btn.textContent = '🔑 Get Pairing Code';
+      btn.disabled = false;
+    }
+
+    async function logoutWhatsApp() {
+      if (!confirm('Logout WhatsApp? Bot will go offline and you can pair a new number.')) return;
+      try {
+        await fetch('/admin/api/whatsapp/logout', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        showToast('WhatsApp logged out');
+        // Hide pairing result, show disconnected with phone input
+        document.getElementById('pairingResult').style.display = 'none';
+        document.getElementById('waConnected').style.display = 'none';
+        document.getElementById('waDisconnected').style.display = 'block';
+        document.getElementById('waStatusDot').classList.remove('online');
+        document.getElementById('waStatusText').textContent = 'Not Connected';
+        document.getElementById('waStatusText').style.color = '#f85149';
+        // Auto refresh after client re-inits
+        setTimeout(checkWhatsAppStatus, 5000);
+      } catch(e) { showToast('Failed to logout', 'error'); }
+    }
+
+    async function restartWhatsApp() {
+      showToast('Restarting WhatsApp...');
+      try {
+        await fetch('/admin/api/whatsapp/restart', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        setTimeout(checkWhatsAppStatus, 5000);
+        showToast('WhatsApp restarting...');
+      } catch(e) { showToast('Failed to restart', 'error'); }
+    }
+
+    // Bot Toggle
+    async function loadBotToggle() {
+      try {
+        const res = await fetch('/admin/api/bot-toggle', { credentials: 'same-origin' });
+        const data = await res.json();
+        document.getElementById('toggleBotEnabled').checked = data.enabled;
+      } catch(e) {}
+    }
+
+    async function toggleBotEnabled() {
+      const enabled = document.getElementById('toggleBotEnabled').checked;
+      try {
+        await fetch('/admin/api/bot-toggle', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        showToast(enabled ? 'Bot is now ONLINE' : 'Bot is now OFFLINE');
+      } catch(e) { showToast('Failed to toggle bot', 'error'); }
+    }
+
+    // Settings
+    async function loadSettings() {
+      try {
+        const res = await fetch('/admin/api/settings', { credentials: 'same-origin' });
+        const data = await res.json();
+        document.getElementById('botName').value = data.botName || '';
+        document.getElementById('botPrompt').value = data.botPrompt || '';
+        document.getElementById('toggleInbox').checked = data.replyToInbox;
+        document.getElementById('toggleGroups').checked = data.replyToGroups;
+        document.getElementById('botNameSidebar').textContent = data.botName || 'AI Assistant';
+      } catch(e) {}
+    }
+
+    async function saveSettings() {
+      try {
+        await fetch('/admin/api/settings', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            botName: document.getElementById('botName').value,
+            botPrompt: document.getElementById('botPrompt').value
+          })
+        });
+        showToast('Settings saved!');
+        loadSettings();
+      } catch(e) { showToast('Failed to save settings', 'error'); }
+    }
+
+    async function saveReplySettings() {
+      try {
+        await fetch('/admin/api/settings', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            replyToInbox: document.getElementById('toggleInbox').checked,
+            replyToGroups: document.getElementById('toggleGroups').checked
+          })
+        });
+        showToast('Reply settings updated!');
+      } catch(e) { showToast('Failed to update', 'error'); }
+    }
+
+    // API Keys
+    let keyHealthStatus = {};
+
+    async function checkAllKeys() {
+      const btn = document.getElementById('checkAllBtn');
+      btn.textContent = '⏳ Checking...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/admin/api/keys/check', { credentials: 'same-origin' });
+        const results = await res.json();
+        results.forEach(r => { keyHealthStatus[r.id] = r; });
+        showToast('Key check complete!');
+        loadKeys();
+      } catch(e) {
+        showToast('Failed to check keys', 'error');
+      }
+      btn.textContent = '🔍 Check All Keys';
+      btn.disabled = false;
+    }
+
+    async function loadKeys() {
+      try {
+        const res = await fetch('/admin/api/keys', { credentials: 'same-origin' });
+        const keys = await res.json();
+        const tbody = document.getElementById('keysTable');
+        const empty = document.getElementById('keysEmpty');
+        if (keys.length === 0) {
+          tbody.innerHTML = '';
+          empty.style.display = 'block';
+          return;
+        }
+        empty.style.display = 'none';
+        tbody.innerHTML = keys.map(k => {
+          const health = keyHealthStatus[k.id];
+          let statusBadge = '';
+          let errorMsg = '';
+          if (health) {
+            if (health.status === 'ok') {
+              statusBadge = '<span class="badge badge-ok">✅ Working</span>';
+            } else {
+              statusBadge = '<span class="badge badge-error">❌ Failed</span>';
+              errorMsg = `<div class="key-error-msg">${health.error}</div>`;
+            }
+          } else {
+            statusBadge = k.enabled
+              ? '<span class="badge badge-active">Active</span>'
+              : '<span class="badge badge-disabled">Disabled</span>';
+          }
+          return `<tr>
+            <td><b>${k.name}</b></td>
+            <td>${k.model}</td>
+            <td><code>${k.apiKey}</code></td>
+            <td><div class="status-row">${statusBadge}</div>${errorMsg}</td>
+            <td>
+              <button class="btn btn-outline btn-sm" onclick="toggleKey('${k.id}', ${!k.enabled})">${k.enabled ? 'Disable' : 'Enable'}</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteKey('${k.id}')">Delete</button>
+            </td>
+          </tr>`;
+        }).join('');
+      } catch(e) {}
+    }
+
+    function showModal() { document.getElementById('addKeyModal').classList.add('show'); }
+    function hideModal() { document.getElementById('addKeyModal').classList.remove('show'); }
+
+    async function addKey() {
+      const name = document.getElementById('keyName').value.trim();
+      const apiKey = document.getElementById('keyValue').value.trim();
+      const endpoint = document.getElementById('keyEndpoint').value.trim();
+      const model = document.getElementById('keyModel').value.trim();
+      if (!name || !apiKey) return showToast('Name and API key are required', 'error');
+      try {
+        await fetch('/admin/api/keys', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, apiKey, endpoint, model })
+        });
+        hideModal();
+        showToast('API key added!');
+        loadKeys();
+        document.getElementById('keyName').value = '';
+        document.getElementById('keyValue').value = '';
+      } catch(e) { showToast('Failed to add key', 'error'); }
+    }
+
+    async function toggleKey(id, enabled) {
+      await fetch(`/admin/api/keys/${id}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      loadKeys();
+    }
+
+    async function deleteKey(id) {
+      if (!confirm('Delete this API key?')) return;
+      await fetch(`/admin/api/keys/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+      showToast('Key deleted');
+      loadKeys();
+    }
+
+    // Blocklist
+    let allContacts = [];
+    let blockedData = { numbers: [], groups: [] };
+
+    async function loadBlocklist() {
+      try {
+        const res = await fetch('/admin/api/blocklist', { credentials: 'same-origin' });
+        blockedData = await res.json();
+        renderBlocklists();
+      } catch(e) {}
+    }
+
+    function renderBlocklists() {
+      const numList = document.getElementById('blockedNumbers');
+      const grpList = document.getElementById('blockedGroups');
+      const numEmpty = document.getElementById('numbersEmpty');
+      const grpEmpty = document.getElementById('groupsEmpty');
+
+      document.getElementById('blockedNumCount').textContent = blockedData.numbers.length;
+      document.getElementById('blockedGrpCount').textContent = blockedData.groups.length;
+
+      if (blockedData.numbers.length === 0) {
+        numList.innerHTML = '';
+        numEmpty.style.display = 'block';
+      } else {
+        numEmpty.style.display = 'none';
+        numList.innerHTML = blockedData.numbers.map(n => {
+          const num = n.replace('@c.us', '');
+          const contact = allContacts.find(c => c.number === num || c.id === n);
+          const name = contact ? contact.name : num;
+          return `<li><span><b>${name}</b><br><small style="color:#8b949e">${num}</small></span>
+          <button class="remove-btn" onclick="removeBlock('number','${encodeURIComponent(n)}')">&times;</button></li>`;
+        }).join('');
+      }
+
+      if (blockedData.groups.length === 0) {
+        grpList.innerHTML = '';
+        grpEmpty.style.display = 'block';
+      } else {
+        grpEmpty.style.display = 'none';
+        grpList.innerHTML = blockedData.groups.map(g => {
+          const contact = allContacts.find(c => c.id === g);
+          const name = contact ? contact.name : g;
+          return `<li><span><b>${name}</b><br><small style="color:#8b949e">${g}</small></span>
+          <button class="remove-btn" onclick="removeBlock('group','${encodeURIComponent(g)}')">&times;</button></li>`;
+        }).join('');
+      }
+    }
+
+    async function loadAllContacts() {
+      try {
+        const res = await fetch('/admin/api/contacts', { credentials: 'same-origin' });
+        allContacts = await res.json();
+        renderSearchResults(allContacts);
+      } catch(e) {
+        allContacts = [];
+      }
+    }
+
+    async function searchContacts() {
+      const query = document.getElementById('searchContactInput').value.trim().toLowerCase();
+      if (!query) {
+        document.getElementById('contactSearchResults').innerHTML = '';
+        document.getElementById('contactSearchEmpty').style.display = 'block';
+        document.getElementById('contactSearchEmpty').textContent = 'Type a name or number to search contacts';
+        return;
+      }
+      if (allContacts.length === 0) await loadAllContacts();
+      const filtered = allContacts.filter(c =>
+        (c.name && c.name.toLowerCase().includes(query)) ||
+        (c.number && c.number.includes(query))
+      );
+      renderSearchResults(filtered);
+    }
+
+    function renderSearchResults(contacts) {
+      const container = document.getElementById('contactSearchResults');
+      const empty = document.getElementById('contactSearchEmpty');
+      if (contacts.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        empty.textContent = 'No contacts found';
+        return;
+      }
+      empty.style.display = 'none';
+      container.innerHTML = contacts.slice(0, 50).map(c => {
+        const num = c.number || c.id;
+        const isBlocked = blockedData.numbers.includes(num + '@c.us') || blockedData.numbers.includes(num);
+        return `<div class="contact-item ${isBlocked ? 'contact-blocked' : ''}">
+          <div class="contact-info">
+            <div class="contact-name">${c.name || 'Unknown'}</div>
+            <div class="contact-number">${num}</div>
+          </div>
+          <div class="contact-actions">
+            ${isBlocked
+              ? `<button class="btn btn-outline btn-sm" onclick="unblockContact('${num}')">Unblock</button>`
+              : `<button class="btn btn-danger btn-sm" onclick="blockContact('${num}')">Block</button>`
+            }
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function blockContact(num) {
+      await fetch('/admin/api/blocklist', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'number', value: num })
+      });
+      showToast(num + ' blocked');
+      await loadBlocklist();
+      searchContacts();
+    }
+
+    async function unblockContact(num) {
+      const id = num.includes('@c.us') ? num : num + '@c.us';
+      await fetch('/admin/api/blocklist/number/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' });
+      showToast(num + ' unblocked');
+      await loadBlocklist();
+      searchContacts();
+    }
+
+    async function blockNumber() {
+      const val = document.getElementById('blockNumberInput').value.trim();
+      if (!val) return;
+      await fetch('/admin/api/blocklist', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'number', value: val })
+      });
+      document.getElementById('blockNumberInput').value = '';
+      showToast('Number blocked');
+      loadBlocklist();
+    }
+
+    async function blockGroup() {
+      const val = document.getElementById('blockGroupInput').value.trim();
+      if (!val) return;
+      await fetch('/admin/api/blocklist', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'group', value: val })
+      });
+      document.getElementById('blockGroupInput').value = '';
+      showToast('Group blocked');
+      loadBlocklist();
+    }
+
+    async function removeBlock(type, encodedId) {
+      await fetch(`/admin/api/blocklist/${type}/${encodedId}`, { method: 'DELETE', credentials: 'same-origin' });
+      loadBlocklist();
+    }
+
+    // Password
+    function checkStrength() {
+      const pwd = document.getElementById('newPwd').value;
+      const el = document.getElementById('pwdStrength');
+      if (pwd.length < 6) { el.textContent = 'Weak'; el.className = 'strength weak'; }
+      else if (pwd.length < 10) { el.textContent = 'Fair'; el.className = 'strength fair'; }
+      else { el.textContent = 'Strong'; el.className = 'strength strong'; }
+    }
+
+    async function changePassword() {
+      const current = document.getElementById('currentPwd').value;
+      const newPwd = document.getElementById('newPwd').value;
+      const confirm = document.getElementById('confirmPwd').value;
+      if (!current || !newPwd || !confirm) return showToast('All fields are required', 'error');
+      if (newPwd !== confirm) return showToast('Passwords do not match', 'error');
+      try {
+        const res = await fetch('/admin/api/change-password', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ currentPassword: current, newPassword: newPwd, confirmPassword: confirm })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Password updated!');
+          document.getElementById('currentPwd').value = '';
+          document.getElementById('newPwd').value = '';
+          document.getElementById('confirmPwd').value = '';
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch(e) { showToast('Failed to change password', 'error'); }
+    }
+
+    function logout() {
+      fetch('/admin/logout', { method: 'POST', credentials: 'same-origin' })
+        .then(() => window.location.href = '/admin/login');
+    }
+
+    async function factoryReset() {
+      if (!confirm('⚠️ FACTORY RESET\n\nThis will delete EVERYTHING:\n- Admin password\n- All admin users\n- All API keys\n- Blocklist\n- WhatsApp session\n\nBot will restart fresh.\n\nAre you sure?')) return;
+      if (!confirm('Last chance! Everything will be permanently deleted.')) return;
+      const btn = document.getElementById('factoryResetBtn');
+      btn.textContent = '⏳ Resetting...';
+      btn.disabled = true;
+      try {
+        const res = await fetch('/admin/api/factory-reset', {
+          method: 'POST',
+          credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Factory reset! Redirecting...');
+          setTimeout(() => { window.location.href = '/admin/login'; }, 3000);
+        } else {
+          showToast(data.error || 'Failed', 'error');
+          btn.textContent = 'Factory Reset';
+          btn.disabled = false;
+        }
+      } catch(e) {
+        showToast('Reset failed', 'error');
+        btn.textContent = 'Factory Reset';
+        btn.disabled = false;
+      }
+    }
+
+    // Init
+    fetchStatus();
+    loadSettings();
+    loadBotToggle();
+    setInterval(fetchStatus, 10000);
+  </script>
+</body>
+</html>
