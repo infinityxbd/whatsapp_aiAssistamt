@@ -334,6 +334,25 @@
       color: #555;
       border-top: 1px solid rgba(37,211,102,0.08);
     }
+    .sel {
+      width: 100%; padding: 10px 14px; background: #0d1117;
+      border: 1px solid rgba(37,211,102,0.2); border-radius: 8px;
+      color: #e6edf3; font-size: 14px; outline: none; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+    }
+    .sel:focus { border-color: #25D366; }
+    .api-card {
+      background: #161b22; border: 1px solid rgba(37,211,102,0.12);
+      border-radius: 12px; padding: 16px; margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    .api-card:hover { border-color: rgba(37,211,102,0.3); }
+    .api-card.inactive { opacity: 0.6; }
+    .api-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .api-card-title { font-size: 16px; font-weight: 600; color: #e6edf3; }
+    .api-card-meta { display: flex; gap: 16px; font-size: 12px; color: #8b949e; margin-bottom: 12px; flex-wrap: wrap; }
+    .api-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
     /* Password */
     .strength {
@@ -402,6 +421,12 @@
       </a>
       <a class="nav-link" data-tab="keys" onclick="switchTab('keys', this)">
         <span class="icon">🔑</span><span>API Keys</span>
+      </a>
+      <a class="nav-link" data-tab="aiapis" onclick="switchTab('aiapis', this)">
+        <span class="icon">🤖</span><span>AI API Manager</span>
+      </a>
+      <a class="nav-link" data-tab="fallback" onclick="switchTab('fallback', this)">
+        <span class="icon">💬</span><span>Fallback Messages</span>
       </a>
       <a class="nav-link" data-tab="blocklist" onclick="switchTab('blocklist', this)">
         <span class="icon">🚫</span><span>Block List</span>
@@ -501,6 +526,41 @@
           <tbody id="keysTable"></tbody>
         </table>
         <div class="empty-state" id="keysEmpty">No API keys added yet. Add your first Gemini API key to get started.</div>
+      </div>
+    </div>
+
+    <!-- Tab: AI API Manager -->
+    <div class="tab" id="tab-aiapis">
+      <div class="section-header"><span class="icon">🤖</span> AI API Manager</div>
+      <div class="info-banner">
+        Manage multiple AI providers with automatic fallback. APIs are tried in priority order — if one fails, the next is used automatically.
+      </div>
+      <div class="header-row">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="showAddAPIModal()">+ Add New API</button>
+          <button class="btn btn-outline btn-sm" onclick="loadAIApis()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div id="aiApisList"></div>
+      <div class="empty-state" id="aiApisEmpty">No AI APIs configured yet. Add your first API to get started.</div>
+    </div>
+
+    <!-- Tab: Fallback Messages -->
+    <div class="tab" id="tab-fallback">
+      <div class="section-header"><span class="icon">💬</span> Fallback Messages</div>
+      <div class="info-banner">
+        When ALL AI APIs fail, a random message from this list is sent to the user. Add or edit messages to customize bot behavior during outages.
+      </div>
+      <div class="card" style="max-width:700px;margin-bottom:16px;">
+        <label>Add New Message</label>
+        <textarea id="newFallbackMsg" placeholder="Type a fallback message..." style="min-height:80px;"></textarea>
+        <br>
+        <button class="btn btn-primary btn-sm" onclick="addFallbackMessage()">+ Add Message</button>
+      </div>
+      <div class="card" style="max-width:700px;">
+        <h3 style="margin-bottom:12px;">Messages <span class="badge badge-active" id="fallbackCount">0</span></h3>
+        <div id="fallbackList"></div>
+        <div class="empty-state" id="fallbackEmpty">No custom messages. Default messages will be used.</div>
       </div>
     </div>
 
@@ -639,6 +699,87 @@
       <a href="https://t.me/infinityxbd" target="_blank" style="color:#25D366;text-decoration:none;">@infinityxbd</a>
     </div>
   </div>
+
+  <!-- Modal: Add/Edit AI API -->
+  <div class="modal-overlay" id="aiApiModal">
+    <div class="modal" style="max-width:550px;max-height:90vh;overflow-y:auto;">
+      <h3 id="aiApiModalTitle">Add AI API</h3>
+      <input type="hidden" id="aiApiEditId">
+      <label>API Name</label>
+      <input type="text" id="aiApiName" placeholder="e.g. DeepSeek API, Gemini Flash">
+      <label>Provider Type</label>
+      <select id="aiApiProvider" class="sel">
+        <option value="openai-compatible">OpenAI Compatible</option>
+        <option value="openai-official">OpenAI Official</option>
+        <option value="gemini">Google Gemini</option>
+        <option value="anthropic">Anthropic Claude</option>
+        <option value="custom-rest">Custom REST API</option>
+        <option value="custom-json">Custom JSON API</option>
+      </select>
+      <label>API Base URL / Endpoint</label>
+      <input type="text" id="aiApiEndpoint" placeholder="https://api.example.com/v1">
+      <label>API Key</label>
+      <input type="password" id="aiApiKeyValue" placeholder="sk-...">
+      <label>Model Name</label>
+      <input type="text" id="aiApiModel" placeholder="e.g. gpt-4, gemini-1.5-flash">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label>Auth Type</label>
+          <select id="aiApiAuthType" class="sel">
+            <option value="bearer">Bearer Token</option>
+            <option value="api-key-header">API Key Header</option>
+            <option value="x-api-key">X-API-Key</option>
+            <option value="basic">Basic Auth</option>
+            <option value="api-key-query">Key in Query</option>
+            <option value="none">No Auth</option>
+          </select>
+        </div>
+        <div><label>Priority</label>
+          <input type="number" id="aiApiPriority" min="1" value="1"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><label>Max Tokens</label>
+          <input type="number" id="aiApiMaxTokens" min="1" value="1024"></div>
+        <div><label>Temperature</label>
+          <input type="number" id="aiApiTemperature" min="0" max="2" step="0.1" value="0.7"></div>
+      </div>
+      <label>Custom System Prompt (optional)</label>
+      <textarea id="aiApiSystemPrompt" placeholder="Override bot prompt for this API..." style="min-height:60px;"></textarea>
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer;color:#8b949e;font-size:13px;">⚙️ Advanced Settings</summary>
+        <div style="margin-top:12px;">
+          <label>HTTP Method</label>
+          <select id="aiApiHttpMethod" class="sel">
+            <option value="POST">POST</option>
+            <option value="GET">GET</option>
+          </select>
+          <label>Custom Headers (JSON)</label>
+          <textarea id="aiApiCustomHeaders" placeholder='{"X-Custom": "value"}' style="min-height:50px;font-family:monospace;font-size:12px;"></textarea>
+          <label>Request Template (JSON, use &#123;&#123;VARIABLES&#125;&#125;)</label>
+          <textarea id="aiApiRequestTemplate" style="min-height:60px;font-family:monospace;font-size:12px;"></textarea>
+          <div class="helper">Variables: &#123;&#123;API_KEY&#125;&#125; &#123;&#123;MODEL&#125;&#125; &#123;&#123;MESSAGE&#125;&#125; &#123;&#123;SYSTEM_PROMPT&#125;&#125; &#123;&#123;MAX_TOKENS&#125;&#125; &#123;&#123;TEMPERATURE&#125;&#125; &#123;&#123;CONVERSATION&#125;&#125;</div>
+          <label>Response Path (dot notation)</label>
+          <input type="text" id="aiApiResponsePath" placeholder="choices[0].message.content" style="font-family:monospace;font-size:12px;">
+          <div class="helper">Examples: choices[0].message.content | candidates[0].content.parts[0].text | content[0].text</div>
+        </div>
+      </details>
+      <div class="modal-actions">
+        <button class="btn btn-outline" onclick="hideAIApiModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveAIApi()" id="aiApiSaveBtn">Add API</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Test Result -->
+  <div class="modal-overlay" id="testResultModal">
+    <div class="modal" style="max-width:450px;">
+      <h3>🧪 API Test Result</h3>
+      <div id="testResultContent"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="document.getElementById('testResultModal').classList.remove('show')">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="addKeyModal">
     <div class="modal">
       <h3>Add API Key</h3>
@@ -681,6 +822,8 @@
       if (tab === 'blocklist') loadBlocklist();
       if (tab === 'whatsapp') checkWhatsAppStatus();
       if (tab === 'adminusers') loadAdminUsers();
+      if (tab === 'aiapis') loadAIApis();
+      if (tab === 'fallback') loadFallbackMessages();
     }
 
     // Status polling
@@ -1252,6 +1395,318 @@
         btn.textContent = 'Factory Reset';
         btn.disabled = false;
       }
+    }
+
+    // ─── AI API Manager ───
+    let aiApisData = [];
+
+    async function loadAIApis() {
+      try {
+        const res = await fetch('/admin/api/ai-apis', { credentials: 'same-origin' });
+        aiApisData = await res.json();
+        renderAIApis();
+      } catch(e) {}
+    }
+
+    function renderAIApis() {
+      const container = document.getElementById('aiApisList');
+      const empty = document.getElementById('aiApisEmpty');
+      if (aiApisData.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      container.innerHTML = aiApisData.map(api => {
+        const statusClass = api.isActive ? '' : ' inactive';
+        const statusBadge = api.isActive
+          ? '<span class="badge badge-active">Active</span>'
+          : '<span class="badge badge-disabled">Inactive</span>';
+        const defaultBadge = api.isDefault
+          ? ' <span class="badge badge-ok">⭐ Default</span>'
+          : '';
+        const testBadge = api.lastTestStatus === 'ok'
+          ? `<span class="badge badge-ok">Last: OK (${api.lastTestResponseTime}s)</span>`
+          : api.lastTestStatus === 'error'
+          ? `<span class="badge badge-error">Last: Failed</span>`
+          : '<span class="badge badge-disabled">Not Tested</span>';
+        const providerLabels = {
+          'openai-compatible': 'OpenAI Compatible',
+          'openai-official': 'OpenAI Official',
+          'gemini': 'Google Gemini',
+          'anthropic': 'Anthropic Claude',
+          'custom-rest': 'Custom REST',
+          'custom-json': 'Custom JSON'
+        };
+        return `
+          <div class="api-card${statusClass}">
+            <div class="api-card-header">
+              <div class="api-card-title">${api.name}</div>
+              <div>${statusBadge}${defaultBadge}</div>
+            </div>
+            <div class="api-card-meta">
+              <span>📡 ${providerLabels[api.providerType] || api.providerType}</span>
+              <span>🧠 ${api.model || 'N/A'}</span>
+              <span>📊 Priority: ${api.priority || '—'}</span>
+              <span>${testBadge}</span>
+            </div>
+            <div class="api-card-actions">
+              <button class="btn btn-outline btn-sm" onclick="testAIApi('${api.id}')">🧪 Test</button>
+              <button class="btn btn-outline btn-sm" onclick="editAIApi('${api.id}')">✏️ Edit</button>
+              <button class="btn btn-outline btn-sm" onclick="toggleAIApi('${api.id}')">${api.isActive ? '🔴 Disable' : '🟢 Enable'}</button>
+              ${!api.isDefault ? `<button class="btn btn-outline btn-sm" onclick="setDefaultAIApi('${api.id}')">⭐ Default</button>` : ''}
+              <button class="btn btn-danger btn-sm" onclick="deleteAIApi('${api.id}','${api.name.replace(/'/g,"\\'")}')">🗑 Delete</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function showAddAPIModal() {
+      document.getElementById('aiApiEditId').value = '';
+      document.getElementById('aiApiModalTitle').textContent = 'Add AI API';
+      document.getElementById('aiApiSaveBtn').textContent = 'Add API';
+      document.getElementById('aiApiName').value = '';
+      document.getElementById('aiApiProvider').value = 'openai-compatible';
+      document.getElementById('aiApiEndpoint').value = '';
+      document.getElementById('aiApiKeyValue').value = '';
+      document.getElementById('aiApiModel').value = '';
+      document.getElementById('aiApiAuthType').value = 'bearer';
+      document.getElementById('aiApiPriority').value = aiApisData.length + 1;
+      document.getElementById('aiApiMaxTokens').value = '1024';
+      document.getElementById('aiApiTemperature').value = '0.7';
+      document.getElementById('aiApiSystemPrompt').value = '';
+      document.getElementById('aiApiHttpMethod').value = 'POST';
+      document.getElementById('aiApiCustomHeaders').value = '';
+      document.getElementById('aiApiRequestTemplate').value = '';
+      document.getElementById('aiApiResponsePath').value = '';
+      document.getElementById('aiApiModal').classList.add('show');
+    }
+
+    function hideAIApiModal() {
+      document.getElementById('aiApiModal').classList.remove('show');
+    }
+
+    async function editAIApi(id) {
+      try {
+        const res = await fetch('/admin/api/ai-apis/' + id, { credentials: 'same-origin' });
+        const api = await res.json();
+        document.getElementById('aiApiEditId').value = api.id;
+        document.getElementById('aiApiModalTitle').textContent = 'Edit AI API';
+        document.getElementById('aiApiSaveBtn').textContent = 'Save Changes';
+        document.getElementById('aiApiName').value = api.name || '';
+        document.getElementById('aiApiProvider').value = api.providerType || 'openai-compatible';
+        document.getElementById('aiApiEndpoint').value = api.endpoint || '';
+        document.getElementById('aiApiKeyValue').value = api.apiKey || '';
+        document.getElementById('aiApiModel').value = api.model || '';
+        document.getElementById('aiApiAuthType').value = api.authType || 'bearer';
+        document.getElementById('aiApiPriority').value = api.priority || 1;
+        document.getElementById('aiApiMaxTokens').value = api.maxTokens || 1024;
+        document.getElementById('aiApiTemperature').value = api.temperature || 0.7;
+        document.getElementById('aiApiSystemPrompt').value = api.systemPrompt || '';
+        document.getElementById('aiApiHttpMethod').value = api.httpMethod || 'POST';
+        document.getElementById('aiApiCustomHeaders').value = api.customHeaders ? JSON.stringify(api.customHeaders, null, 2) : '';
+        document.getElementById('aiApiRequestTemplate').value = api.requestTemplate || '';
+        document.getElementById('aiApiResponsePath').value = api.responsePath || '';
+        document.getElementById('aiApiModal').classList.add('show');
+      } catch(e) { showToast('Failed to load API details', 'error'); }
+    }
+
+    async function saveAIApi() {
+      const editId = document.getElementById('aiApiEditId').value;
+      const name = document.getElementById('aiApiName').value.trim();
+      const providerType = document.getElementById('aiApiProvider').value;
+      const endpoint = document.getElementById('aiApiEndpoint').value.trim();
+      const apiKey = document.getElementById('aiApiKeyValue').value.trim();
+      const model = document.getElementById('aiApiModel').value.trim();
+      const authType = document.getElementById('aiApiAuthType').value;
+      const priority = parseInt(document.getElementById('aiApiPriority').value) || 1;
+      const maxTokens = parseInt(document.getElementById('aiApiMaxTokens').value) || 1024;
+      const temperature = parseFloat(document.getElementById('aiApiTemperature').value) || 0.7;
+      const systemPrompt = document.getElementById('aiApiSystemPrompt').value.trim();
+      const httpMethod = document.getElementById('aiApiHttpMethod').value;
+      let customHeaders = {};
+      let requestTemplate = '';
+      const responsePath = document.getElementById('aiApiResponsePath').value.trim();
+
+      try {
+        const h = document.getElementById('aiApiCustomHeaders').value.trim();
+        if (h) customHeaders = JSON.parse(h);
+      } catch(e) { return showToast('Invalid JSON in Custom Headers', 'error'); }
+
+      try {
+        const t = document.getElementById('aiApiRequestTemplate').value.trim();
+        if (t) { JSON.parse(t); requestTemplate = t; }
+      } catch(e) { return showToast('Invalid JSON in Request Template', 'error'); }
+
+      if (!name) return showToast('API name is required', 'error');
+      if (!apiKey) return showToast('API key is required', 'error');
+
+      const body = {
+        name, providerType, endpoint, apiKey, model, authType,
+        priority, maxTokens, temperature, systemPrompt, httpMethod,
+        customHeaders, requestTemplate, responsePath, isActive: true
+      };
+
+      try {
+        const url = editId ? '/admin/api/ai-apis/' + editId : '/admin/api/ai-apis';
+        const method = editId ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method, credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(editId ? 'API updated!' : 'API added!');
+          hideAIApiModal();
+          loadAIApis();
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch(e) { showToast('Failed to save API', 'error'); }
+    }
+
+    async function deleteAIApi(id, name) {
+      if (!confirm('Delete "' + name + '"?')) return;
+      try {
+        await fetch('/admin/api/ai-apis/' + id, { method: 'DELETE', credentials: 'same-origin' });
+        showToast('API deleted');
+        loadAIApis();
+      } catch(e) { showToast('Failed to delete', 'error'); }
+    }
+
+    async function toggleAIApi(id) {
+      try {
+        await fetch('/admin/api/ai-apis/' + id + '/toggle', {
+          method: 'PATCH', credentials: 'same-origin'
+        });
+        loadAIApis();
+      } catch(e) { showToast('Failed to toggle', 'error'); }
+    }
+
+    async function setDefaultAIApi(id) {
+      try {
+        await fetch('/admin/api/ai-apis/' + id + '/set-default', {
+          method: 'PATCH', credentials: 'same-origin'
+        });
+        showToast('Default API updated');
+        loadAIApis();
+      } catch(e) { showToast('Failed to set default', 'error'); }
+    }
+
+    async function testAIApi(id) {
+      const modal = document.getElementById('testResultModal');
+      const content = document.getElementById('testResultContent');
+      content.innerHTML = '<div style="text-align:center;padding:20px;">⏳ Testing API... please wait</div>';
+      modal.classList.add('show');
+
+      try {
+        const res = await fetch('/admin/api/ai-apis/' + id + '/test', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        const providerLabels = {
+          'openai-compatible': 'OpenAI Compatible', 'openai-official': 'OpenAI Official',
+          'gemini': 'Google Gemini', 'anthropic': 'Anthropic Claude',
+          'custom-rest': 'Custom REST', 'custom-json': 'Custom JSON'
+        };
+
+        if (data.success) {
+          content.innerHTML = `
+            <div style="background:rgba(37,211,102,0.08);border:1px solid rgba(37,211,102,0.15);border-radius:8px;padding:16px;margin-bottom:12px;">
+              <div style="font-size:18px;font-weight:600;color:#25D366;margin-bottom:8px;">✅ API Working</div>
+              <div style="font-size:13px;color:#8b949e;line-height:2;">
+                <b>Provider:</b> ${providerLabels[data.provider] || data.provider}<br>
+                <b>Model:</b> ${data.model}<br>
+                <b>Response Time:</b> ${data.responseTime}s<br>
+                <b>Status:</b> <span style="color:#25D366;">200 OK</span>
+              </div>
+            </div>
+            <div style="background:#0d1117;border-radius:8px;padding:12px;font-size:13px;color:#e6edf3;max-height:150px;overflow-y:auto;">
+              <b>Response Preview:</b><br>
+              <div style="margin-top:8px;color:#8b949e;">${data.preview || 'N/A'}</div>
+            </div>`;
+        } else {
+          content.innerHTML = `
+            <div style="background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.15);border-radius:8px;padding:16px;">
+              <div style="font-size:18px;font-weight:600;color:#f85149;margin-bottom:8px;">❌ API Failed</div>
+              <div style="font-size:13px;color:#8b949e;line-height:2;">
+                <b>Provider:</b> ${providerLabels[data.provider] || data.provider}<br>
+                <b>Model:</b> ${data.model}<br>
+                <b>Response Time:</b> ${data.responseTime}s<br>
+                <b>Error:</b> <span style="color:#f85149;">${data.error}</span>
+              </div>
+            </div>`;
+        }
+        loadAIApis();
+      } catch(e) {
+        content.innerHTML = `<div style="background:rgba(248,81,73,0.08);border:1px solid rgba(248,81,73,0.15);border-radius:8px;padding:16px;">
+          <div style="font-size:16px;font-weight:600;color:#f85149;">❌ Test Failed</div>
+          <div style="font-size:13px;color:#8b949e;margin-top:8px;">${e.message}</div>
+        </div>`;
+      }
+    }
+
+    // ─── Fallback Messages ───
+    let fallbackMessages = [];
+
+    async function loadFallbackMessages() {
+      try {
+        const res = await fetch('/admin/api/fallback-messages', { credentials: 'same-origin' });
+        fallbackMessages = await res.json();
+        renderFallbackMessages();
+      } catch(e) {}
+    }
+
+    function renderFallbackMessages() {
+      const container = document.getElementById('fallbackList');
+      const empty = document.getElementById('fallbackEmpty');
+      document.getElementById('fallbackCount').textContent = fallbackMessages.length;
+      if (fallbackMessages.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      container.innerHTML = fallbackMessages.map((msg, i) => `
+        <div class="contact-item" style="align-items:flex-start;">
+          <div class="contact-info" style="flex:1;">
+            <div style="font-size:13px;color:#e6edf3;line-height:1.5;padding:4px 0;">${msg}</div>
+          </div>
+          <div class="contact-actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteFallbackMessage(${i})">🗑</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addFallbackMessage() {
+      const msg = document.getElementById('newFallbackMsg').value.trim();
+      if (!msg) return showToast('Type a message first', 'error');
+      try {
+        const res = await fetch('/admin/api/fallback-messages', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('newFallbackMsg').value = '';
+          showToast('Message added!');
+          loadFallbackMessages();
+        }
+      } catch(e) { showToast('Failed to add message', 'error'); }
+    }
+
+    async function deleteFallbackMessage(index) {
+      try {
+        await fetch('/admin/api/fallback-messages/' + index, {
+          method: 'DELETE', credentials: 'same-origin'
+        });
+        showToast('Message removed');
+        loadFallbackMessages();
+      } catch(e) { showToast('Failed to delete', 'error'); }
     }
 
     // Init

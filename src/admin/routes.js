@@ -479,6 +479,208 @@ function createRoutes(botState, client) {
     }
   });
 
+  // ─── AI API Management ───
+
+  // List all AI APIs
+  router.get('/api/ai-apis', (req, res) => {
+    const apis = readJSON('ai_apis.json') || [];
+    const masked = apis.map(api => ({
+      ...api,
+      apiKeyEncrypted: api.apiKeyEncrypted ? '••••••••' + api.apiKeyEncrypted.slice(-6) : ''
+    }));
+    res.json(masked);
+  });
+
+  // Get full API config (for edit modal)
+  router.get('/api/ai-apis/:id', (req, res) => {
+    const apis = readJSON('ai_apis.json') || [];
+    const api = apis.find(a => a.id === req.params.id);
+    if (!api) return res.status(404).json({ error: 'API not found' });
+    const { decrypt } = require('../storage/encryption');
+    res.json({ ...api, apiKey: decrypt(api.apiKeyEncrypted) });
+  });
+
+  // Add new AI API
+  router.post('/api/ai-apis', (req, res) => {
+    const { encrypt } = require('../storage/encryption');
+    const { v4: uuidv4 } = require('uuid');
+    const {
+      name, providerType, endpoint, apiKey, model,
+      authType, customHeaders, requestTemplate, responsePath,
+      maxTokens, temperature, systemPrompt, priority,
+      isActive, httpMethod
+    } = req.body;
+
+    if (!name || !providerType) {
+      return res.status(400).json({ error: 'Name and provider type are required' });
+    }
+    if (!apiKey) {
+      return res.status(400).json({ error: 'API key is required' });
+    }
+
+    const apis = readJSON('ai_apis.json') || [];
+    const newAPI = {
+      id: uuidv4(),
+      name,
+      providerType,
+      endpoint: endpoint || '',
+      apiKeyEncrypted: encrypt(apiKey),
+      model: model || '',
+      authType: authType || 'bearer',
+      customHeaders: customHeaders || {},
+      requestTemplate: requestTemplate || '',
+      responsePath: responsePath || '',
+      maxTokens: maxTokens || 1024,
+      temperature: temperature || 0.7,
+      systemPrompt: systemPrompt || '',
+      priority: priority || (apis.length + 1),
+      isActive: isActive !== false,
+      isDefault: apis.length === 0,
+      httpMethod: httpMethod || 'POST',
+      lastTestStatus: null,
+      lastTestedAt: null,
+      lastTestResponseTime: null,
+      lastTestError: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    apis.push(newAPI);
+    writeJSON('ai_apis.json', apis);
+    console.log(`🔑 AI API added: ${name} (${providerType})`);
+    res.json({ success: true, id: newAPI.id });
+  });
+
+  // Update AI API
+  router.put('/api/ai-apis/:id', (req, res) => {
+    const { encrypt } = require('../storage/encryption');
+    const apis = readJSON('ai_apis.json') || [];
+    const api = apis.find(a => a.id === req.params.id);
+    if (!api) return res.status(404).json({ error: 'API not found' });
+
+    const {
+      name, providerType, endpoint, apiKey, model,
+      authType, customHeaders, requestTemplate, responsePath,
+      maxTokens, temperature, systemPrompt, priority,
+      isActive, httpMethod
+    } = req.body;
+
+    if (name) api.name = name;
+    if (providerType) api.providerType = providerType;
+    if (endpoint !== undefined) api.endpoint = endpoint;
+    if (apiKey && apiKey !== '••••••••') api.apiKeyEncrypted = encrypt(apiKey);
+    if (model !== undefined) api.model = model;
+    if (authType) api.authType = authType;
+    if (customHeaders) api.customHeaders = customHeaders;
+    if (requestTemplate !== undefined) api.requestTemplate = requestTemplate;
+    if (responsePath !== undefined) api.responsePath = responsePath;
+    if (maxTokens !== undefined) api.maxTokens = maxTokens;
+    if (temperature !== undefined) api.temperature = temperature;
+    if (systemPrompt !== undefined) api.systemPrompt = systemPrompt;
+    if (priority !== undefined) api.priority = priority;
+    if (isActive !== undefined) api.isActive = isActive;
+    if (httpMethod) api.httpMethod = httpMethod;
+    api.updatedAt = new Date().toISOString();
+
+    writeJSON('ai_apis.json', apis);
+    console.log(`✏️ AI API updated: ${api.name}`);
+    res.json({ success: true });
+  });
+
+  // Delete AI API
+  router.delete('/api/ai-apis/:id', (req, res) => {
+    let apis = readJSON('ai_apis.json') || [];
+    const api = apis.find(a => a.id === req.params.id);
+    if (!api) return res.status(404).json({ error: 'API not found' });
+    const wasDefault = api.isDefault;
+    apis = apis.filter(a => a.id !== req.params.id);
+    if (wasDefault && apis.length > 0) {
+      apis[0].isDefault = true;
+    }
+    writeJSON('ai_apis.json', apis);
+    console.log(`🗑️ AI API deleted: ${api.name}`);
+    res.json({ success: true });
+  });
+
+  // Toggle enable/disable
+  router.patch('/api/ai-apis/:id/toggle', (req, res) => {
+    const apis = readJSON('ai_apis.json') || [];
+    const api = apis.find(a => a.id === req.params.id);
+    if (!api) return res.status(404).json({ error: 'API not found' });
+    api.isActive = !api.isActive;
+    api.updatedAt = new Date().toISOString();
+    writeJSON('ai_apis.json', apis);
+    res.json({ success: true, isActive: api.isActive });
+  });
+
+  // Set default
+  router.patch('/api/ai-apis/:id/set-default', (req, res) => {
+    const apis = readJSON('ai_apis.json') || [];
+    apis.forEach(a => a.isDefault = false);
+    const api = apis.find(a => a.id === req.params.id);
+    if (!api) return res.status(404).json({ error: 'API not found' });
+    api.isDefault = true;
+    api.updatedAt = new Date().toISOString();
+    writeJSON('ai_apis.json', apis);
+    res.json({ success: true });
+  });
+
+  // Update priority (batch)
+  router.put('/api/ai-apis-priority', (req, res) => {
+    const { priorities } = req.body;
+    if (!Array.isArray(priorities)) return res.status(400).json({ error: 'Invalid data' });
+    const apis = readJSON('ai_apis.json') || [];
+    for (const p of priorities) {
+      const api = apis.find(a => a.id === p.id);
+      if (api) api.priority = p.priority;
+    }
+    writeJSON('ai_apis.json', apis);
+    res.json({ success: true });
+  });
+
+  // Test AI API
+  router.post('/api/ai-apis/:id/test', async (req, res) => {
+    try {
+      const aiService = require('../ai/service');
+      const result = await aiService.testAPI(req.params.id);
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // ─── Fallback Messages ───
+
+  router.get('/api/fallback-messages', (req, res) => {
+    const messages = readJSON('fallbackmessages.json') || [];
+    res.json(messages);
+  });
+
+  router.post('/api/fallback-messages', (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message is required' });
+    const messages = readJSON('fallbackmessages.json') || [];
+    messages.push(message);
+    writeJSON('fallbackmessages.json', messages);
+    res.json({ success: true, count: messages.length });
+  });
+
+  router.put('/api/fallback-messages', (req, res) => {
+    const { messages } = req.body;
+    if (!Array.isArray(messages)) return res.status(400).json({ error: 'Invalid data' });
+    writeJSON('fallbackmessages.json', messages);
+    res.json({ success: true, count: messages.length });
+  });
+
+  router.delete('/api/fallback-messages/:index', (req, res) => {
+    const idx = parseInt(req.params.index);
+    const messages = readJSON('fallbackmessages.json') || [];
+    if (idx < 0 || idx >= messages.length) return res.status(400).json({ error: 'Invalid index' });
+    messages.splice(idx, 1);
+    writeJSON('fallbackmessages.json', messages);
+    res.json({ success: true, count: messages.length });
+  });
+
   return router;
 }
 

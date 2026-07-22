@@ -3,7 +3,7 @@
  * Developer: Tarif Ahmed (infinityX)
  * Telegram: https://t.me/infinityxbd
  */
-const gemini = require('../ai/gemini');
+const aiService = require('../ai/service');
 const { readJSON } = require('../storage/store');
 const { handleCommand } = require('./commands');
 
@@ -124,7 +124,7 @@ async function handleMessage(message, client) {
     addToHistory(chatId, 'user', userMsg);
     const history = getChatHistory(chatId);
 
-    const aiResponse = await gemini.generateReply(userMsg, history);
+    const aiResponse = await aiService.generateReply(userMsg, history);
     console.log(`🤖 Reply: "${aiResponse}"`);
 
     addToHistory(chatId, 'model', aiResponse);
