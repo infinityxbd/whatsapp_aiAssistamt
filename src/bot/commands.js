@@ -50,57 +50,101 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
   const senderId = commandSenderId || message.from;
   console.log(`🔍 Command: "${body}" from ${senderId} (chat: ${message.from})`);
 
-  // Check authorization
+  // Step 1: Resolve sender to phone number if it's a LID
+  let resolvedPhone = null;
   const senderClean = cleanId(senderId);
-  const botClean = cleanId(botWid || '');
-  let authorized = false;
-  let isOwner = false;
 
-  // 1. Direct phone match
-  if (senderClean === botClean) {
-    authorized = true;
-    isOwner = true;
+  // Check LidMap cache first
+  if (lidMap && lidMap[senderClean]) {
+    resolvedPhone = lidMap[senderClean];
+    console.log(`🔍 LID cache hit: ${senderClean} → ${resolvedPhone}`);
   }
 
-  // 2. LidMap cache
-  if (!authorized && lidMap) {
-    const cachedPhone = lidMap[senderClean];
-    if (cachedPhone && cleanId(cachedPhone) === botClean) {
-      authorized = true;
-      isOwner = true;
-    }
-    if (!authorized && cachedPhone) {
-      const admin = isAdminUser(cachedPhone);
-      if (admin) { authorized = true; }
-    }
-  }
-
-  // 3. Lazy resolve via WhatsApp contact lookup
-  if (!authorized) {
+  // If not in cache, try resolving via contact lookup
+  if (!resolvedPhone) {
     try {
       const { resolveLid } = require('./whatsapp');
-      const phone = await resolveLid(senderId);
-      if (phone) {
-        console.log(`🔍 Resolved ${senderId} → ${phone}`);
-        if (cleanId(phone) === botClean) {
-          authorized = true;
-          isOwner = true;
-        } else {
-          const admin = isAdminUser(phone);
-          if (admin) authorized = true;
-        }
+      resolvedPhone = await resolveLid(senderId);
+      if (resolvedPhone) {
+        console.log(`🔍 Resolved ${senderId} → ${resolvedPhone}`);
       }
     } catch (e) {}
   }
 
-  // 4. Direct admin check (number already stored)
+  // Step 2: Also resolve botWid to make comparison consistent
+  let botPhone = null;
+  const botClean = cleanId(botWid || '');
+  if (lidMap && lidMap[botClean]) {
+    botPhone = lidMap[botClean];
+  }
+  if (!botPhone) {
+    try {
+      const { resolveLid } = require('./whatsapp');
+      botPhone = await resolveLid(botWid);
+    } catch (e) {}
+  }
+  const effectiveBotClean = botPhone ? cleanId(botPhone) : botClean;
+
+  // Step 3: Check authorization
+  let authorized = false;
+  let isOwner = false;
+
+  // 3a. Direct phone match (sender = bot owner)
+  const effectiveSenderClean = resolvedPhone ? cleanId(resolvedPhone) : senderClean;
+  if (effectiveSenderClean === effectiveBotClean) {
+    authorized = true;
+    isOwner = true;
+    console.log(`🟢 Owner match: ${effectiveSenderClean}`);
+  }
+
+  // 3b. Admin check with resolved phone
+  if (!authorized && resolvedPhone) {
+    const admin = isAdminUser(resolvedPhone);
+    if (admin) {
+      authorized = true;
+      console.log(`👤 Admin match via resolved phone: ${resolvedPhone}`);
+    }
+  }
+
+  // 3c. Direct admin check (number already stored in exact format)
   if (!authorized) {
     const admin = isAdminUser(senderId);
-    if (admin) authorized = true;
+    if (admin) {
+      authorized = true;
+      console.log(`👤 Admin match via direct check: ${senderId}`);
+    }
+  }
+
+  // 3d. Fuzzy number extraction — strip all non-digits and try matching
+  if (!authorized) {
+    const senderDigits = senderId.replace(/\D/g, '');
+    const botDigits = (botWid || '').replace(/\D/g, '');
+    if (senderDigits && botDigits && senderDigits === botDigits) {
+      authorized = true;
+      isOwner = true;
+      console.log(`🟢 Owner match (digits): ${senderDigits}`);
+    }
+  }
+
+  // 3e. Check if sender digits match any admin number digits
+  if (!authorized) {
+    const senderDigits = senderId.replace(/\D/g, '');
+    if (senderDigits) {
+      const adminUsers = readJSON('adminusers.json') || [];
+      for (const u of adminUsers) {
+        if (!u || !u.number) continue;
+        const adminDigits = u.number.replace(/\D/g, '');
+        if (adminDigits && senderDigits === adminDigits) {
+          authorized = true;
+          console.log(`👤 Admin match (digits): ${senderDigits} = ${adminDigits}`);
+          break;
+        }
+      }
+    }
   }
 
   if (!authorized) {
-    console.log(`❌ Not authorized: ${senderId}`);
+    console.log(`❌ Not authorized: ${senderId} (resolved: ${resolvedPhone || 'null'}, botWid: ${botWid})`);
     await reply(message, '❌ You are not authorized to use commands.', client);
     return true;
   }

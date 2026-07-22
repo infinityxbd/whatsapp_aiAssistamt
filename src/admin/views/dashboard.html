@@ -422,9 +422,6 @@
       <a class="nav-link" data-tab="aiapis" onclick="switchTab('aiapis', this)">
         <span class="icon">🔑</span><span>AI API Manager</span>
       </a>
-      <a class="nav-link" data-tab="fallback" onclick="switchTab('fallback', this)">
-        <span class="icon">💬</span><span>Fallback Messages</span>
-      </a>
       <a class="nav-link" data-tab="blocklist" onclick="switchTab('blocklist', this)">
         <span class="icon">🚫</span><span>Block List</span>
       </a>
@@ -495,7 +492,7 @@
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="toggle-card">
+      <div class="toggle-card" style="margin-bottom:24px;">
         <div class="toggle-info">
           <div class="title">👥 Group Message Replies</div>
           <div class="desc">Reply to messages in WhatsApp groups</div>
@@ -505,6 +502,23 @@
           <input type="checkbox" id="toggleGroups" onchange="saveReplySettings()">
           <span class="toggle-slider"></span>
         </label>
+      </div>
+      <div style="border-top:1px solid rgba(37,211,102,0.12);padding-top:24px;">
+        <div class="section-header" style="font-size:17px;"><span class="icon">📨</span> Fallback Messages</div>
+        <div class="info-banner">
+          When ALL AI APIs fail, a random message from this list is sent to the user. Add or edit messages to customize bot behavior during outages.
+        </div>
+        <div class="card" style="max-width:700px;margin-bottom:16px;">
+          <label>Add New Message</label>
+          <textarea id="newFallbackMsg" placeholder="Type a fallback message..." style="min-height:80px;"></textarea>
+          <br>
+          <button class="btn btn-primary btn-sm" onclick="addFallbackMessage()">+ Add Message</button>
+        </div>
+        <div class="card" style="max-width:700px;">
+          <h3 style="margin-bottom:12px;">Messages <span class="badge badge-active" id="fallbackCount">0</span></h3>
+          <div id="fallbackList"></div>
+          <div class="empty-state" id="fallbackEmpty">No custom messages. Default messages will be used.</div>
+        </div>
       </div>
     </div>
 
@@ -522,25 +536,6 @@
       </div>
       <div id="aiApisList"></div>
       <div class="empty-state" id="aiApisEmpty">No AI APIs configured yet. Add your first API to get started.</div>
-    </div>
-
-    <!-- Tab: Fallback Messages -->
-    <div class="tab" id="tab-fallback">
-      <div class="section-header"><span class="icon">💬</span> Fallback Messages</div>
-      <div class="info-banner">
-        When ALL AI APIs fail, a random message from this list is sent to the user. Add or edit messages to customize bot behavior during outages.
-      </div>
-      <div class="card" style="max-width:700px;margin-bottom:16px;">
-        <label>Add New Message</label>
-        <textarea id="newFallbackMsg" placeholder="Type a fallback message..." style="min-height:80px;"></textarea>
-        <br>
-        <button class="btn btn-primary btn-sm" onclick="addFallbackMessage()">+ Add Message</button>
-      </div>
-      <div class="card" style="max-width:700px;">
-        <h3 style="margin-bottom:12px;">Messages <span class="badge badge-active" id="fallbackCount">0</span></h3>
-        <div id="fallbackList"></div>
-        <div class="empty-state" id="fallbackEmpty">No custom messages. Default messages will be used.</div>
-      </div>
     </div>
 
     <!-- Tab: Block List -->
@@ -778,11 +773,11 @@
       document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
       document.getElementById('tab-' + tab).classList.add('active');
       el.classList.add('active');
+      if (tab === 'replies') { loadSettings(); loadFallbackMessages(); }
       if (tab === 'blocklist') loadBlocklist();
       if (tab === 'whatsapp') checkWhatsAppStatus();
       if (tab === 'adminusers') loadAdminUsers();
       if (tab === 'aiapis') loadAIApis();
-      if (tab === 'fallback') loadFallbackMessages();
     }
 
     // Status polling

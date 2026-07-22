@@ -43,37 +43,51 @@ function addToHistory(chatId, role, text) {
 }
 
 async function sendMessage(chatId, text, message, client) {
-  // Method 1: client.sendMessage with quotedMessageId (most reliable)
+  const msgId = message.id._serialized || message.id.id || message.id;
+
+  // Method 1: message.reply() — most reliable for quoted replies
   try {
-    const msgId = message.id._serialized || message.id.id || message.id;
-    await client.sendMessage(chatId, text, { quotedMessageId: msgId });
+    await message.reply(text);
     return true;
   } catch (e1) {
-    console.log(`⚠️ Quote method 1 failed: ${e1.message}`);
-    // Method 2: chat.sendMessage with quotedMessageId
-    try {
-      const chat = await client.getChatById(chatId);
-      const msgId = message.id._serialized || message.id.id || message.id;
-      await chat.sendMessage(text, { quotedMessageId: msgId });
-      return true;
-    } catch (e2) {
-      console.log(`⚠️ Quote method 2 failed: ${e2.message}`);
-      // Method 3: message.reply() fallback
+    console.log(`⚠️ Quote method 1 (message.reply) failed: ${e1.message}`);
+  }
+
+  // Method 2: WWebJS internal API — send via WhatsApp Web stores
+  try {
+    const sent = await client.pupPage.evaluate(async (chatId, text, quotedMsgId) => {
       try {
-        await message.reply(text);
-        return true;
-      } catch (e3) {
-        // Method 4: Plain message as last resort
-        try {
-          const chat = await client.getChatById(chatId);
-          await chat.sendMessage(text);
+        const msg = window.Store.Msg.get(quotedMsgId);
+        if (msg) {
+          const chat = window.Store.Chat.get(chatId);
+          await chat.sendMsg(text, { quotedMsg: msg });
           return true;
-        } catch (e4) {
-          console.error(`❌ Send failed: ${e4.message}`);
-          return false;
         }
-      }
-    }
+      } catch (e) {}
+      return false;
+    }, chatId, text, msgId);
+    if (sent) return true;
+  } catch (e2) {
+    console.log(`⚠️ Quote method 2 (WWebJS internal) failed: ${e2.message}`);
+  }
+
+  // Method 3: chat.sendMessage with quotedMessageId option
+  try {
+    const chat = await client.getChatById(chatId);
+    await chat.sendMessage(text, { quotedMessageId: msgId });
+    return true;
+  } catch (e3) {
+    console.log(`⚠️ Quote method 3 (chat.sendMessage) failed: ${e3.message}`);
+  }
+
+  // Method 4: Plain message — no quoting, last resort
+  try {
+    const chat = await client.getChatById(chatId);
+    await chat.sendMessage(text);
+    return true;
+  } catch (e4) {
+    console.error(`❌ All send methods failed: ${e4.message}`);
+    return false;
   }
 }
 
