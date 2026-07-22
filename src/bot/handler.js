@@ -43,17 +43,28 @@ function addToHistory(chatId, role, text) {
 }
 
 async function sendMessage(chatId, text, message, client) {
-  try {
-    await message.reply(text);
-    return true;
-  } catch (e) {}
+  // Method 1: Explicit quoted reply using chat.sendMessage with quotedMessageId
   try {
     const chat = await client.getChatById(chatId);
-    await chat.sendMessage(text);
+    const msgId = message.id._serialized || message.id;
+    await chat.sendMessage(text, { quotedMessageId: msgId });
     return true;
-  } catch (e2) {
-    console.error(`❌ Send failed: ${e2.message}`);
-    return false;
+  } catch (e1) {
+    // Method 2: message.reply() fallback
+    try {
+      await message.reply(text);
+      return true;
+    } catch (e2) {
+      // Method 3: Plain message as last resort
+      try {
+        const chat = await client.getChatById(chatId);
+        await chat.sendMessage(text);
+        return true;
+      } catch (e3) {
+        console.error(`❌ Send failed: ${e3.message}`);
+        return false;
+      }
+    }
   }
 }
 
