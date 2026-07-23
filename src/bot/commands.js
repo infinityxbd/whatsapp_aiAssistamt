@@ -303,12 +303,18 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
 *Bot Control:*
 /onbot — Bot ON
 /offbot — Bot OFF
+/restart — Restart bot
+/update — Pull update from GitHub
+/clear — Clear cache data
 
 *Reply Control:*
 /oninbox — Inbox reply ON
 /offinbox — Inbox reply OFF
 /ongroup — Group reply ON
 /offgroup — Group reply OFF
+
+*AI Prompt:*
+/aiprompt <text> — Update AI personality
 
 *Block:*
 /block <number> — Block
@@ -317,9 +323,142 @@ async function handleCommand(message, client, botWid, lidMap, commandSenderId) {
 
 *Other:*
 /gplist — Group list
+/log <n> — Show last n logs
 /status — Bot status
 /help — Commands`;
       await reply(message, txt, client);
+      return true;
+    }
+
+    // ─── Restart Bot ───
+    case '/restart': {
+      await reply(message, '🔄 Restarting bot...', client);
+      console.log('🔄 Restart triggered via /restart command');
+      setTimeout(() => {
+        const { spawn } = require('child_process');
+        const cwd = require('path').join(__dirname, '..', '..');
+        const child = spawn('node', ['index.js'], { detached: true, stdio: 'ignore', cwd });
+        child.unref();
+        process.exit(0);
+      }, 800);
+      return true;
+    }
+
+    // ─── Update AI Prompt ───
+    case '/aiprompt': {
+      if (!param) {
+        const config = readJSON('config.json') || {};
+        const current = config.botPrompt || '(not set)';
+        await reply(message, `📝 *Current AI Prompt:*\n\n${current}\n\nUse: /aiprompt <new prompt>`, client);
+        return true;
+      }
+      setConfig('botPrompt', param);
+      console.log(`📝 AI Prompt updated via command`);
+      await reply(message, `✅ AI Personality Prompt updated!\n\n*New:*\n${param.substring(0, 200)}${param.length > 200 ? '...' : ''}`, client);
+      return true;
+    }
+
+    // ─── Git Update ───
+    case '/update': {
+      await reply(message, '📥 Pulling update from GitHub...', client);
+      console.log('📥 /update triggered');
+      const { execSync } = require('child_process');
+      const cwd = require('path').join(__dirname, '..', '..');
+      try {
+        execSync('git pull origin main', { cwd, timeout: 30000 });
+        await reply(message, '📦 Installing dependencies...', client);
+        execSync('npm install --production', { cwd, timeout: 60000 });
+        await reply(message, '✅ Update complete! Restarting...', client);
+        console.log('✅ /update complete, restarting...');
+        setTimeout(() => {
+          const { spawn } = require('child_process');
+          const child = spawn('node', ['index.js'], { detached: true, stdio: 'ignore', cwd });
+          child.unref();
+          process.exit(0);
+        }, 800);
+      } catch (e) {
+        await reply(message, `❌ Update failed: ${e.message.substring(0, 200)}`, client);
+        console.error('❌ /update failed:', e.message);
+      }
+      return true;
+    }
+
+    // ─── Show Logs ───
+    case '/log': {
+      const lines = parseInt(param) || 10;
+      const count = Math.min(Math.max(lines, 1), 30);
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const logFile = path.join(__dirname, '..', '..', 'bot.log');
+        if (fs.existsSync(logFile)) {
+          const content = fs.readFileSync(logFile, 'utf-8');
+          const allLines = content.trim().split('\n');
+          const recent = allLines.slice(-count);
+          await reply(message, `📋 *Last ${recent.length} logs:*\n\n\`\`\`\n${recent.join('\n').substring(0, 1800)}\n\`\`\``, client);
+        } else {
+          // Fallback: send from in-memory log buffer via routes
+          await reply(message, '📋 Log file not found. Check dashboard Live Logs tab.', client);
+        }
+      } catch (e) {
+        await reply(message, '📋 Logs unavailable. Check dashboard Live Logs tab.', client);
+      }
+      return true;
+    }
+
+    // ─── Clear Cache ───
+    case '/clear': {
+      await reply(message, '🧹 Clearing cache...', client);
+      const fs = require('fs');
+      const path = require('path');
+      const cwd = path.join(__dirname, '..', '..');
+      let cleared = 0;
+
+      const targets = [
+        { name: '.wwebjs_cache', isDir: true },
+        { name: 'tmp', isDir: true }
+      ];
+
+      for (const t of targets) {
+        const p = path.join(cwd, t.name);
+        if (fs.existsSync(p)) {
+          try { fs.rmSync(p, { recursive: true, force: true }); cleared++; } catch (e) {}
+        }
+      }
+
+      // Clean Chrome cache inside session
+      const sessionDir = path.join(cwd, '.wwebjs_auth', 'session');
+      if (fs.existsSync(sessionDir)) {
+        const cacheFolders = ['Cache', 'Code Cache', 'GPUCache', 'Service Worker', 'Blob_storage'];
+        for (const folder of cacheFolders) {
+          const fp = path.join(sessionDir, folder);
+          if (fs.existsSync(fp)) {
+            try { fs.rmSync(fp, { recursive: true, force: true }); cleared++; } catch (e) {}
+          }
+        }
+        const defaultDir = path.join(sessionDir, 'Default');
+        if (fs.existsSync(defaultDir)) {
+          for (const folder of cacheFolders) {
+            const fp = path.join(defaultDir, folder);
+            if (fs.existsSync(fp)) {
+              try { fs.rmSync(fp, { recursive: true, force: true }); cleared++; } catch (e) {}
+            }
+          }
+          const lockFiles = fs.readdirSync(defaultDir).filter(f => f.endsWith('.lock') || f === 'LOCK' || f === 'lockfile');
+          for (const lf of lockFiles) {
+            try { fs.unlinkSync(path.join(defaultDir, lf)); cleared++; } catch (e) {}
+          }
+        }
+      }
+
+      // Remove stale Chrome lock files
+      const lockNames = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+      for (const lf of lockNames) {
+        try { fs.unlinkSync(path.join(sessionDir, lf)); cleared++; } catch (e) {}
+      }
+
+      console.log(`🧹 Cache cleared (${cleared} items)`);
+      await reply(message, `✅ Cache cleared! (${cleared} items removed)\n\nWhatsApp session & API keys are safe.`, client);
       return true;
     }
 

@@ -18,14 +18,20 @@ const sseClients = new Set();
 const originalLog = console.log;
 const originalError = console.error;
 const originalWarn = console.warn;
+const fs = require('fs');
+const logFilePath = require('path').join(__dirname, '..', '..', 'bot.log');
+const LOG_WRITE_FLAGS = { flag: 'a' };
 
 function broadcastLog(level, args) {
   const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
-  const entry = { time: new Date().toLocaleTimeString('en-GB', { hour12: false }), level, msg };
+  const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const entry = { time, level, msg };
   logBuffer.push(entry);
   if (logBuffer.length > MAX_LOGS) logBuffer.shift();
   const data = `data: ${JSON.stringify(entry)}\n\n`;
   sseClients.forEach(res => { try { res.write(data); } catch (e) {} });
+  // Write to log file for /log command
+  try { fs.writeFileSync(logFilePath, `${time} [${level}] ${msg}\n`, LOG_WRITE_FLAGS); } catch (e) {}
 }
 
 console.log = (...args) => { originalLog.apply(console, args); broadcastLog('info', args); };
