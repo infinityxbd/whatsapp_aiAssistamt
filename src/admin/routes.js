@@ -7,8 +7,63 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const { execSync, spawn } = require('child_process');
 const { readJSON, writeJSON } = require('../storage/store');
 const { requireAuth } = require('./middleware');
+
+// ─── Live Log System ───
+const logBuffer = [];
+const MAX_LOGS = 500;
+const sseClients = new Set();
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+function broadcastLog(level, args) {
+  const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+  const entry = { time: new Date().toLocaleTimeString('en-GB', { hour12: false }), level, msg };
+  logBuffer.push(entry);
+  if (logBuffer.length > MAX_LOGS) logBuffer.shift();
+  const data = `data: ${JSON.stringify(entry)}\n\n`;
+  sseClients.forEach(res => { try { res.write(data); } catch (e) {} });
+}
+
+console.log = (...args) => { originalLog.apply(console, args); broadcastLog('info', args); };
+console.error = (...args) => { originalError.apply(console, args); broadcastLog('error', args); };
+console.warn = (...args) => { originalWarn.apply(console, args); broadcastLog('warn', args); };
+
+// ─── Auto-Update System ───
+let autoUpdateTimer = null;
+
+function startAutoUpdate() {
+  stopAutoUpdate();
+  const config = readJSON('config.json') || {};
+  if (!config.autoUpdate) return;
+  const interval = (config.autoUpdateInterval || 30) * 60 * 1000;
+  autoUpdateTimer = setInterval(async () => {
+    try {
+      const cwd = path.join(__dirname, '..', '..');
+      const current = execSync('git rev-parse HEAD', { cwd, encoding: 'utf-8' }).trim();
+      execSync('git fetch origin main', { cwd, timeout: 15000 });
+      const latest = execSync('git rev-parse origin/main', { cwd, encoding: 'utf-8' }).trim();
+      if (current !== latest) {
+        console.log('🔄 Auto-update: new version detected, updating...');
+        execSync('git pull origin main', { cwd });
+        execSync('npm install --production', { cwd, timeout: 60000 });
+        console.log('✅ Auto-update complete. Restarting...');
+        const child = spawn('node', ['index.js'], { detached: true, stdio: 'ignore', cwd });
+        child.unref();
+        process.exit(0);
+      }
+    } catch (e) {
+      console.log('🔄 Auto-update check: ' + e.message);
+    }
+  }, interval);
+}
+
+function stopAutoUpdate() {
+  if (autoUpdateTimer) { clearInterval(autoUpdateTimer); autoUpdateTimer = null; }
+}
 
 function createRoutes(botState, client) {
   const router = express.Router();
@@ -680,6 +735,85 @@ function createRoutes(botState, client) {
     writeJSON('fallbackmessages.json', messages);
     res.json({ success: true, count: messages.length });
   });
+
+  // ─── Soft Restart (keeps session + API keys) ───
+  router.post('/api/soft-restart', (req, res) => {
+    res.json({ success: true, message: 'Restarting bot...' });
+    console.log('🔄 Soft restart triggered from admin panel');
+    setTimeout(() => {
+      try { client.destroy(); } catch (e) {}
+      const cwd = path.join(__dirname, '..', '..');
+      const child = spawn('node', ['index.js'], { detached: true, stdio: 'ignore', cwd });
+      child.unref();
+      process.exit(0);
+    }, 800);
+  });
+
+  // ─── Live Logs (SSE) ───
+  router.get('/api/logs', (req, res) => {
+    res.json(logBuffer.slice(-200));
+  });
+
+  router.get('/api/logs/stream', (req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.write(':\n\n');
+    logBuffer.forEach(entry => {
+      try { res.write(`data: ${JSON.stringify(entry)}\n\n`); } catch (e) {}
+    });
+    sseClients.add(res);
+    req.on('close', () => sseClients.delete(res));
+  });
+
+  // ─── Git Update ───
+  router.post('/api/git-update', (req, res) => {
+    res.json({ success: true, message: 'Pulling from GitHub...' });
+    console.log('📥 Git update triggered from admin panel');
+    setTimeout(() => {
+      const cwd = path.join(__dirname, '..', '..');
+      try {
+        console.log('📥 git pull...');
+        execSync('git pull origin main', { cwd, timeout: 30000 });
+        console.log('📦 npm install...');
+        execSync('npm install --production', { cwd, timeout: 60000 });
+        console.log('✅ Update complete. Restarting...');
+        try { client.destroy(); } catch (e) {}
+        const child = spawn('node', ['index.js'], { detached: true, stdio: 'ignore', cwd });
+        child.unref();
+        process.exit(0);
+      } catch (e) {
+        console.error('❌ Update failed:', e.message);
+      }
+    }, 500);
+  });
+
+  // ─── Auto-Update Toggle ───
+  router.get('/api/auto-update', (req, res) => {
+    const config = readJSON('config.json') || {};
+    res.json({
+      enabled: config.autoUpdate === true,
+      interval: config.autoUpdateInterval || 30
+    });
+  });
+
+  router.post('/api/auto-update', (req, res) => {
+    const { enabled, interval } = req.body;
+    const config = readJSON('config.json') || {};
+    config.autoUpdate = enabled === true;
+    if (typeof interval === 'number' && interval >= 5) config.autoUpdateInterval = interval;
+    writeJSON('config.json', config);
+    if (config.autoUpdate) startAutoUpdate();
+    else stopAutoUpdate();
+    console.log(`🔄 Auto-update ${config.autoUpdate ? 'enabled (' + (config.autoUpdateInterval || 30) + 'min)' : 'disabled'}`);
+    res.json({ success: true, enabled: config.autoUpdate, interval: config.autoUpdateInterval || 30 });
+  });
+
+  // Start auto-update on boot if enabled
+  setTimeout(() => { try { startAutoUpdate(); } catch (e) {} }, 2000);
 
   return router;
 }

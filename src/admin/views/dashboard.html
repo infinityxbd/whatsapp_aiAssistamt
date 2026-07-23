@@ -428,6 +428,12 @@
       <a class="nav-link" data-tab="whatsapp" onclick="switchTab('whatsapp', this)">
         <span class="icon">📱</span><span>WhatsApp Login</span>
       </a>
+      <a class="nav-link" data-tab="logs" onclick="switchTab('logs', this)">
+        <span class="icon">📋</span><span>Live Logs</span>
+      </a>
+      <a class="nav-link" data-tab="update" onclick="switchTab('update', this)">
+        <span class="icon">⬇️</span><span>Update</span>
+      </a>
       <a class="nav-link" data-tab="adminusers" onclick="switchTab('adminusers', this)">
         <span class="icon">👤</span><span>Admin Users</span>
       </a>
@@ -643,10 +649,56 @@
           <div class="info-banner">
             ✅ WhatsApp is connected and working. Bot is online.
           </div>
-          <div style="display:flex;gap:8px;margin-top:16px;">
-            <button class="btn btn-outline" onclick="restartWhatsApp()">🔄 Restart</button>
+          <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="restartWhatsApp()">🔄 Restart WhatsApp</button>
+            <button class="btn btn-primary" onclick="softRestart()">⚡ Soft Restart</button>
             <button class="btn btn-danger" onclick="logoutWhatsApp()">🚪 Logout</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Live Logs -->
+    <div class="tab" id="tab-logs">
+      <div class="section-header"><span class="icon">📋</span> Live Logs</div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-sm btn-outline" onclick="clearLogs()">🗑 Clear</button>
+            <button class="btn btn-sm btn-outline" id="logPauseBtn" onclick="toggleLogPause()">⏸ Pause</button>
+          </div>
+          <div style="font-size:12px;color:#8b949e;" id="logCount">0 logs</div>
+        </div>
+        <div id="logContainer" style="height:500px;overflow-y:auto;background:#0d1117;font-family:'Fira Code',monospace;font-size:12px;line-height:1.6;padding:12px 16px;"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Update -->
+    <div class="tab" id="tab-update">
+      <div class="section-header"><span class="icon">⬇️</span> Update Bot</div>
+      <div class="card" style="max-width:500px;">
+        <div style="margin-bottom:20px;">
+          <button class="btn btn-primary btn-full" onclick="gitUpdate()" id="gitUpdateBtn">
+            ⬇️ Pull Update from GitHub & Restart
+          </button>
+          <div style="font-size:12px;color:#8b949e;margin-top:8px;">
+            Pulls latest code from GitHub, installs deps, and restarts bot. Your session & API keys are preserved.
+          </div>
+        </div>
+        <hr style="border-color:rgba(255,255,255,0.06);margin:20px 0;">
+        <div class="toggle-card">
+          <div class="toggle-info">
+            <div class="title">🔄 Auto-Update</div>
+            <div class="desc">Periodically check GitHub for new updates and apply automatically</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleAutoUpdate" onchange="toggleAutoUpdate()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div style="margin-top:16px;">
+          <label>Check Interval (minutes)</label>
+          <input type="number" id="autoUpdateInterval" min="5" max="1440" value="30" style="width:120px;" onchange="saveAutoUpdate()">
         </div>
       </div>
     </div>
@@ -960,6 +1012,114 @@
         });
         setTimeout(checkWhatsAppStatus, 5000);
       } catch(e) { showToast('Failed to restart', 'error'); }
+    }
+
+    // ─── Soft Restart ───
+    async function softRestart() {
+      if (!confirm('Soft restart? Bot will restart but session & API keys stay safe.')) return;
+      showToast('Soft restarting bot...');
+      try {
+        await fetch('/admin/api/soft-restart', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        setTimeout(() => { window.location.reload(); }, 4000);
+      } catch(e) { showToast('Restart failed', 'error'); }
+    }
+
+    // ─── Live Logs ───
+    let logEventSource = null;
+    let logPaused = false;
+    let logEntries = [];
+
+    function connectLogs() {
+      if (logEventSource) logEventSource.close();
+      logEventSource = new EventSource('/admin/api/logs/stream');
+      logEventSource.onmessage = (e) => {
+        if (logPaused) return;
+        try {
+          const entry = JSON.parse(e.data);
+          logEntries.push(entry);
+          if (logEntries.length > 500) logEntries.shift();
+          appendLogEntry(entry);
+        } catch(err) {}
+      };
+      logEventSource.onerror = () => { setTimeout(connectLogs, 3000); };
+    }
+
+    function appendLogEntry(entry) {
+      const container = document.getElementById('logContainer');
+      if (!container) return;
+      const colors = { info: '#8b949e', error: '#f85149', warn: '#d29922' };
+      const line = document.createElement('div');
+      line.style.color = colors[entry.level] || '#8b949e';
+      const prefix = entry.level === 'error' ? '❌' : entry.level === 'warn' ? '⚠️' : '▸';
+      line.textContent = `${entry.time} ${prefix} ${entry.msg}`;
+      container.appendChild(line);
+      if (container.children.length > 500) container.removeChild(container.firstChild);
+      container.scrollTop = container.scrollHeight;
+      document.getElementById('logCount').textContent = logEntries.length + ' logs';
+    }
+
+    function clearLogs() {
+      logEntries = [];
+      const container = document.getElementById('logContainer');
+      if (container) container.innerHTML = '';
+      document.getElementById('logCount').textContent = '0 logs';
+    }
+
+    function toggleLogPause() {
+      logPaused = !logPaused;
+      document.getElementById('logPauseBtn').textContent = logPaused ? '▶ Resume' : '⏸ Pause';
+    }
+
+    // ─── Git Update ───
+    async function gitUpdate() {
+      if (!confirm('Pull latest from GitHub & restart? Session & API keys stay safe.')) return;
+      const btn = document.getElementById('gitUpdateBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Updating...';
+      showToast('Pulling from GitHub...');
+      try {
+        await fetch('/admin/api/git-update', {
+          method: 'POST', credentials: 'same-origin'
+        });
+        setTimeout(() => { window.location.reload(); }, 8000);
+      } catch(e) { showToast('Update failed', 'error'); btn.disabled = false; btn.textContent = '⬇️ Pull Update from GitHub & Restart'; }
+    }
+
+    // ─── Auto-Update ───
+    async function loadAutoUpdate() {
+      try {
+        const res = await fetch('/admin/api/auto-update', { credentials: 'same-origin' });
+        const data = await res.json();
+        document.getElementById('toggleAutoUpdate').checked = data.enabled;
+        document.getElementById('autoUpdateInterval').value = data.interval;
+      } catch(e) {}
+    }
+
+    async function toggleAutoUpdate() {
+      const enabled = document.getElementById('toggleAutoUpdate').checked;
+      const interval = parseInt(document.getElementById('autoUpdateInterval').value) || 30;
+      try {
+        await fetch('/admin/api/auto-update', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, interval })
+        });
+        showToast(enabled ? `Auto-update enabled (${interval}min)` : 'Auto-update disabled');
+      } catch(e) { showToast('Failed to save', 'error'); }
+    }
+
+    async function saveAutoUpdate() {
+      const enabled = document.getElementById('toggleAutoUpdate').checked;
+      const interval = parseInt(document.getElementById('autoUpdateInterval').value) || 30;
+      try {
+        await fetch('/admin/api/auto-update', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, interval })
+        });
+      } catch(e) {}
     }
 
     // Bot Toggle
@@ -1580,6 +1740,8 @@
     fetchStatus();
     loadSettings();
     loadBotToggle();
+    loadAutoUpdate();
+    connectLogs();
     setInterval(fetchStatus, 10000);
   </script>
 </body>
