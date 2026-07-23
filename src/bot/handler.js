@@ -9,7 +9,6 @@ const { handleCommand } = require('./commands');
 
 const MAX_HISTORY = 7;
 const chatHistories = {};
-const processingQueue = new Map();
 const MAX_CONCURRENT = 3;
 let activeCount = 0;
 
@@ -128,17 +127,31 @@ async function handleMessage(message, client) {
 
     const { botState } = require('./whatsapp');
     const isGroup = message.from.endsWith('@g.us');
+
+    // ─── Self-sent messages: commands only, ignore everything else ───
+    if (message.fromMe) {
+      const body = (message.body || '').trim();
+      if (body.startsWith('/')) {
+        console.log(`📤 Self-command: "${body}" from own number`);
+        const commandSenderId = message.from;
+        const isCommand = await handleCommand(message, client, botState.botWid, botState.lidMap, commandSenderId);
+        if (isCommand) {
+          console.log(`✅ Self-command executed: ${body}`);
+        }
+      }
+      // Ignore all other self-sent messages (no AI reply, no loop)
+      return;
+    }
+
+    // ─── Incoming messages: muted/archived check ───
     const chatCheck = await checkMutedArchived(message.from, client);
     if (chatCheck) return;
 
     const commandSenderId = isGroup ? (message.author || message.from) : message.from;
 
-    // Commands always processed (even fromMe) so owner can use /command on own number
+    // Commands from other admins
     const isCommand = await handleCommand(message, client, botState.botWid, botState.lidMap, commandSenderId);
     if (isCommand) return;
-
-    // Skip own messages for AI replies
-    if (message.fromMe) return;
 
     // Flood protection: queue AI reply processing
     await queueMessage(async () => {
@@ -162,7 +175,6 @@ async function handleMessage(message, client) {
       console.log(`📨 "${userMsg}"`);
 
       if (isGroup) {
-        // GROUP: Instant reply (1-2 sec)
         await sleep(1000 + Math.random() * 1000);
         try { await client.sendSeen(chatId); } catch (e) {}
         addToHistory(chatId, 'user', userMsg);
@@ -173,7 +185,6 @@ async function handleMessage(message, client) {
         await sendMessage(chatId, aiResponse, message, client);
         console.log(`✅ Sent to ${chatId}`);
       } else {
-        // INBOX: Human-like delay
         await sleep(randomBetween(1, 3));
         try { await client.sendSeen(chatId); } catch (e) {}
         try {

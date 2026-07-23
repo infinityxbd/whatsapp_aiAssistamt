@@ -278,7 +278,9 @@ client.on('disconnected', (reason) => {
   if (onlineInterval) clearInterval(onlineInterval);
 });
 
-client.on('message', async (message) => {
+// Use message_create to catch ALL messages including self-sent
+// (library's 'message' event = MESSAGE_RECEIVED, skips fromMe)
+client.on('message_create', async (message) => {
   await handleMessage(message, client);
 });
 
