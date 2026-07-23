@@ -269,13 +269,10 @@ function createRoutes(botState, client) {
 
   // API: WhatsApp Login / Pairing
   router.get('/api/whatsapp/status', (req, res) => {
-    try {
-      const connected = botState.status === 'online';
-      const info = client ? client.info : null;
-      res.json({ connected, info: info || null });
-    } catch (e) {
-      res.json({ connected: false, info: null });
-    }
+    const connected = botState.status === 'online';
+    let info = null;
+    try { info = client ? client.info : null; } catch (e) {}
+    res.json({ connected, info: info || null });
   });
 
   router.post('/api/whatsapp/pair', async (req, res) => {

@@ -1738,11 +1738,13 @@
 
     // Init
     fetchStatus();
+    checkWhatsAppStatus();
     loadSettings();
     loadBotToggle();
     loadAutoUpdate();
     connectLogs();
     setInterval(fetchStatus, 10000);
+    setInterval(checkWhatsAppStatus, 10000);
   </script>
 </body>
 </html>
